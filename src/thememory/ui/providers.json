@@ -1,0 +1,343 @@
+{
+  "source": "@earendil-works/pi-ai dist/providers/data (DSH) + TheMemory dual OpenAI/Anthropic",
+  "generated_at": "2026-10-23T10:14:50.000Z",
+  "note": "api=openai|anthropic are natively supported; api=none needs a compatible gateway URL",
+  "providers": [
+    {
+      "id": "amazon-bedrock",
+      "label": "Amazon Bedrock",
+      "base_url": "https://bedrock-runtime.us-east-1.amazonaws.com",
+      "api": "none",
+      "openai_compat": false,
+      "needs_manual_url": false
+    },
+    {
+      "id": "ant-ling",
+      "label": "Ant Ling",
+      "base_url": "https://api.ant-ling.com/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "anthropic",
+      "label": "Anthropic",
+      "base_url": "https://api.anthropic.com",
+      "api": "anthropic",
+      "openai_compat": false,
+      "needs_manual_url": false
+    },
+    {
+      "id": "azure",
+      "label": "Azure OpenAI",
+      "base_url": "",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": true
+    },
+    {
+      "id": "baseten",
+      "label": "Baseten",
+      "base_url": "https://inference.baseten.co/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "cerebras",
+      "label": "Cerebras",
+      "base_url": "https://api.cerebras.ai/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "cloudflare-ai-gateway",
+      "label": "Cloudflare AI Gateway",
+      "base_url": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
+      "api": "anthropic",
+      "openai_compat": false,
+      "needs_manual_url": true
+    },
+    {
+      "id": "cloudflare-workers-ai",
+      "label": "Cloudflare Workers AI",
+      "base_url": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": true
+    },
+    {
+      "id": "deepseek",
+      "label": "DeepSeek",
+      "base_url": "https://api.deepseek.com/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "fireworks",
+      "label": "Fireworks",
+      "base_url": "https://api.fireworks.ai/inference/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "github-copilot",
+      "label": "GitHub Copilot",
+      "base_url": "https://api.individual.githubcopilot.com",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "google",
+      "label": "Google AI",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "api": "none",
+      "openai_compat": false,
+      "needs_manual_url": false
+    },
+    {
+      "id": "google-vertex",
+      "label": "Google Vertex",
+      "base_url": "https://{location}-aiplatform.googleapis.com",
+      "api": "none",
+      "openai_compat": false,
+      "needs_manual_url": true
+    },
+    {
+      "id": "groq",
+      "label": "Groq",
+      "base_url": "https://api.groq.com/openai/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "huggingface",
+      "label": "Hugging Face",
+      "base_url": "https://router.huggingface.co/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "kimi-coding",
+      "label": "Kimi Coding",
+      "base_url": "https://api.kimi.com/coding/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "meta",
+      "label": "Meta AI",
+      "base_url": "https://api.meta.ai/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "minimax",
+      "label": "MiniMax",
+      "base_url": "https://api.minimax.io/anthropic",
+      "api": "anthropic",
+      "openai_compat": false,
+      "needs_manual_url": false
+    },
+    {
+      "id": "minimax-cn",
+      "label": "MiniMax CN",
+      "base_url": "https://api.minimaxi.com/anthropic",
+      "api": "anthropic",
+      "openai_compat": false,
+      "needs_manual_url": false
+    },
+    {
+      "id": "mistral",
+      "label": "Mistral",
+      "base_url": "https://api.mistral.ai/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "moonshotai",
+      "label": "Moonshot AI",
+      "base_url": "https://api.moonshot.ai/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "moonshotai-cn",
+      "label": "Moonshot CN",
+      "base_url": "https://api.moonshot.cn/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "nvidia",
+      "label": "NVIDIA NIM",
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "base_url": "https://api.openai.com/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "openai-codex",
+      "label": "OpenAI Codex",
+      "base_url": "https://chatgpt.com/backend-api",
+      "api": "none",
+      "openai_compat": false,
+      "needs_manual_url": false
+    },
+    {
+      "id": "opencode",
+      "label": "OpenCode",
+      "base_url": "https://opencode.ai/inference/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "opencode-go",
+      "label": "OpenCode Go",
+      "base_url": "https://opencode.ai/inference/go/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "qwen-token-plan",
+      "label": "Qwen Token Plan",
+      "base_url": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "qwen-token-plan-cn",
+      "label": "Qwen Token Plan CN",
+      "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "qwen-token-plan-individual",
+      "label": "Qwen Token Plan Individual",
+      "base_url": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "radius",
+      "label": "Radius",
+      "base_url": "https://radius.pi.dev/v1",
+      "api": "none",
+      "openai_compat": false,
+      "needs_manual_url": false
+    },
+    {
+      "id": "together",
+      "label": "Together AI",
+      "base_url": "https://api.together.ai/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "vercel-ai-gateway",
+      "label": "Vercel AI Gateway",
+      "base_url": "https://ai-gateway.vercel.sh/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "xai",
+      "label": "xAI",
+      "base_url": "https://api.x.ai/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "xiaomi",
+      "label": "Xiaomi MiMo",
+      "base_url": "https://api.xiaomimimo.com/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "xiaomi-token-plan-ams",
+      "label": "Xiaomi Token Plan AMS",
+      "base_url": "https://token-plan-ams.xiaomimimo.com/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "xiaomi-token-plan-cn",
+      "label": "Xiaomi Token Plan CN",
+      "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "xiaomi-token-plan-sgp",
+      "label": "Xiaomi Token Plan SGP",
+      "base_url": "https://token-plan-sgp.xiaomimimo.com/v1",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "zai",
+      "label": "Z.ai",
+      "base_url": "https://api.z.ai/api/coding/paas/v4",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "zai-coding-cn",
+      "label": "Zhipu Coding CN",
+      "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": false
+    },
+    {
+      "id": "custom",
+      "label": "自定义",
+      "base_url": "",
+      "api": "openai",
+      "openai_compat": true,
+      "needs_manual_url": true
+    }
+  ]
+}

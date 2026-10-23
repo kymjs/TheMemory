@@ -7,10 +7,17 @@ name = "thememory"
 version = "0.1.0"
 description = "Background long-term memory layer for Agents"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 license = "MIT"
 authors = [{ name = "kymjs" }]
-dependencies = []
+dependencies = [
+    "numpy>=1.26",
+    "onnxruntime>=1.17",
+    "httpx>=0.27",
+    "mcp>=1.0,<2",
+    "tokenizers>=0.20",
+    "huggingface-hub>=0.26",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -27,6 +34,14 @@ thememoryd = "thememory.daemon.main:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/thememory"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/thememory/storage/migrations/001_initial.sql" = "thememory/storage/migrations/001_initial.sql"
+"src/thememory/storage/migrations/001_turns.sql" = "thememory/storage/migrations/001_turns.sql"
+"src/thememory/ui/page.html" = "thememory/ui/page.html"
+"src/thememory/ui/providers.json" = "thememory/ui/providers.json"
+"src/thememory/installer/hermes_plugin/plugin.yaml" = "thememory/installer/hermes_plugin/plugin.yaml"
+"src/thememory/installer/hermes_plugin/__init__.py" = "thememory/installer/hermes_plugin/__init__.py"
+
 [tool.uv]
 default-groups = ["dev"]
 
@@ -36,6 +51,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.8",
     "mypy>=1.13",
+    "types-networkx",
 ]
 
 [tool.ruff]
@@ -47,16 +63,25 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
 mypy_path = "src"
 packages = ["thememory"]
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "onnxruntime.*",
+    "tokenizers.*",
+    "mcp.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -66,4 +91,5 @@ pythonpath = ["src"]
 markers = [
     "posix: tests that require POSIX sockets or fcntl",
     "windows: tests that require Windows IPC path",
+    "slow: downloads or long-running integration",
 ]

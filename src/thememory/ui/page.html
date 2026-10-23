@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TheMemory 配置</title>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --ink: #1c1915;
+      --muted: #6b645a;
+      --card: #fffdf8;
+      --line: #d9d0c2;
+      --accent: #0f6b5c;
+      --accent-ink: #f4fffb;
+      --danger: #8b2e2e;
+      --ok: #1f6b3a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(900px 400px at 10% -10%, #e7f2ef 0%, transparent 55%),
+        radial-gradient(700px 360px at 100% 0%, #f7e9d8 0%, transparent 50%),
+        var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+    h1 {
+      font-size: 1.75rem;
+      letter-spacing: 0.02em;
+      margin: 0 0 0.35rem;
+    }
+    .sub { color: var(--muted); margin-bottom: 1.75rem; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 8px 24px rgba(28, 25, 21, 0.04);
+    }
+    section h2 {
+      font-size: 1rem;
+      margin: 0 0 1rem;
+      padding-bottom: 0.55rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.85rem 1rem;
+    }
+    .full { grid-column: 1 / -1; }
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    input, select {
+      font: inherit;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.55rem 0.7rem;
+      background: #fff;
+    }
+    input:focus, select:focus {
+      outline: 2px solid rgba(15, 107, 92, 0.25);
+      border-color: var(--accent);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-top: 0.5rem;
+    }
+    button {
+      font: inherit;
+      border: 0;
+      border-radius: 999px;
+      padding: 0.6rem 1.1rem;
+      cursor: pointer;
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+    button.secondary {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+    button:disabled { opacity: 0.55; cursor: wait; }
+    #status {
+      margin-top: 0.9rem;
+      min-height: 1.4rem;
+      font-size: 0.92rem;
+    }
+    #status.ok { color: var(--ok); }
+    #status.err { color: var(--danger); }
+    #doctor {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.82rem;
+      white-space: pre-wrap;
+      background: #1c1915;
+      color: #f3efe6;
+      border-radius: 10px;
+      padding: 0.9rem 1rem;
+      margin: 0;
+    }
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>TheMemory</h1>
+    <p class="sub">本机配置（仅 127.0.0.1）。保存后会尝试热重载守护进程。</p>
+
+    <section>
+      <h2>提取用大模型（LLM）</h2>
+      <div class="grid">
+        <label class="full">提供方（来自 DSH / pi-ai 目录快照）
+          <select id="provider"></select>
+        </label>
+        <p class="full sub" id="provider_hint" style="margin:0"></p>
+        <label class="full">Base URL
+          <input id="base_url" placeholder="https://api.deepseek.com/v1" />
+        </label>
+        <label>模型（下拉选择）
+          <select id="model_select">
+            <option value="">— 先刷新模型列表 —</option>
+          </select>
+        </label>
+        <label>模型（手动输入）
+          <input id="model" placeholder="deepseek-chat" />
+        </label>
+        <label class="full">
+          <button id="refreshModelsBtn" class="secondary" type="button" style="width:fit-content">刷新模型列表</button>
+        </label>
+        <label class="full">API Key（可选，写入配置文件；留空则不改。未填写时读取环境变量 THEMEMORY_LLM_API_KEY）
+          <input id="api_key" type="password" autocomplete="off" placeholder="••••••••" />
+        </label>
+        <p class="full sub" id="api_key_hint" style="margin:0"></p>
+      </div>
+    </section>
+
+    <section>
+      <h2>提取触发</h2>
+      <div class="grid">
+        <label>轮次阈值 trigger_turns
+          <input id="trigger_turns" type="number" min="1" />
+        </label>
+        <label>空闲小时 trigger_idle_hours
+          <input id="trigger_idle_hours" type="number" min="0" step="0.5" />
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <h2>嵌入模型</h2>
+      <div class="grid">
+        <label>模型（只读）
+          <input id="embedding_model" readonly />
+        </label>
+        <label>驻留策略 resident
+          <select id="resident">
+            <option value="auto">auto</option>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </label>
+        <label class="full">查询指令前缀 query_instruction
+          <input id="query_instruction" />
+        </label>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button id="saveBtn" type="button">保存配置</button>
+      <button id="probeBtn" class="secondary" type="button">探测 LLM</button>
+      <button id="doctorBtn" class="secondary" type="button">刷新状态</button>
+    </div>
+    <div id="status"></div>
+
+    <section>
+      <h2>Doctor</h2>
+      <pre id="doctor">加载中…</pre>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let providers = [];
+    let suppressProviderSync = false;
+    function setStatus(msg, ok) {
+      const el = $("status");
+      el.textContent = msg || "";
+      el.className = ok === true ? "ok" : ok === false ? "err" : "";
+    }
+    function findProviderByUrl(url) {
+      const u = (url || "").replace(/\/$/, "");
+      return providers.find((p) => p.base_url && p.base_url.replace(/\/$/, "") === u);
+    }
+    function fillModelSelect(models, selected) {
+      const sel = $("model_select");
+      sel.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = models.length ? "— 从列表选择 —" : "— 先刷新模型列表 —";
+      sel.appendChild(placeholder);
+      for (const m of models) {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        if (selected && m === selected) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    }
+    async function loadProviders() {
+      const res = await fetch("/api/providers");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "加载提供方失败");
+      providers = data.providers || [];
+      const sel = $("provider");
+      sel.innerHTML = "";
+      for (const p of providers) {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.label;
+        sel.appendChild(opt);
+      }
+    }
+    async function loadConfig() {
+      const res = await fetch("/api/config");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "加载失败");
+      $("base_url").value = data.llm.base_url || "";
+      $("model").value = data.llm.model || "";
+      $("api_key").value = "";
+      $("api_key_hint").textContent = data.llm.api_key_set
+        ? "当前已配置 api_key（已遮蔽，留空保存则保留原值）。"
+        : "当前未在配置文件中保存 api_key。";
+      $("trigger_turns").value = data.extraction.trigger_turns;
+      $("trigger_idle_hours").value = data.extraction.trigger_idle_hours;
+      $("embedding_model").value = data.embedding.model || "";
+      $("resident").value = String(data.embedding.resident);
+      $("query_instruction").value = data.embedding.query_instruction || "";
+      const matched = findProviderByUrl(data.llm.base_url || "");
+      suppressProviderSync = true;
+      $("provider").value = matched ? matched.id : "custom";
+      suppressProviderSync = false;
+      updateProviderHint();
+      if (data.llm.model) fillModelSelect([data.llm.model], data.llm.model);
+    }
+    function providerApi(p) {
+      if (!p) return "openai";
+      if (p.api === "openai" || p.api === "anthropic" || p.api === "none") return p.api;
+      return p.openai_compat === false ? "none" : "openai";
+    }
+    function providerSupported(p) {
+      const api = providerApi(p);
+      return api === "openai" || api === "anthropic";
+    }
+    function updateProviderHint() {
+      const p = providers.find((x) => x.id === $("provider").value);
+      if (!p) { $("provider_hint").textContent = ""; return; }
+      const notes = [];
+      const api = providerApi(p);
+      if (p.needs_manual_url) notes.push("该提供方需手填完整 Base URL（可能含账号占位符）。");
+      if (api === "anthropic") notes.push("将使用 Anthropic Messages 协议（/v1/messages）。");
+      else if (api === "openai") notes.push("将使用 OpenAI Chat Completions 协议。");
+      else notes.push("此提供方无内置 OpenAI/Anthropic 协议；请改用兼容网关，或选自定义并填写兼容 Base URL。");
+      $("provider_hint").textContent = notes.join(" ") || "选择后会自动填写 Base URL。";
+    }
+    async function refreshModels() {
+      const base_url = $("base_url").value.trim();
+      if (!base_url) throw new Error("请先填写 Base URL");
+      if (base_url.includes("{")) throw new Error("Base URL 仍含占位符，请先改成完整地址");
+      const p = providers.find((x) => x.id === $("provider").value);
+      setStatus("正在拉取模型列表…");
+      const res = await fetch("/api/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          base_url,
+          api_key: $("api_key").value,
+          api: providerApi(p),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "拉取模型失败");
+      const current = $("model").value.trim();
+      fillModelSelect(data.models || [], current);
+      if (current && (data.models || []).includes(current)) {
+        $("model_select").value = current;
+      }
+      setStatus(`已加载 ${data.count || 0} 个模型`, true);
+    }
+    async function loadDoctor() {
+      const res = await fetch("/api/doctor");
+      const data = await res.json();
+      $("doctor").textContent = JSON.stringify(data, null, 2);
+      if (!res.ok) throw new Error(data.error || "Doctor 失败");
+      if (data.error) throw new Error(data.error);
+    }
+    $("provider").onchange = () => {
+      if (suppressProviderSync) return;
+      const p = providers.find((x) => x.id === $("provider").value);
+      updateProviderHint();
+      if (!p || p.id === "custom") return;
+      if (p.base_url) $("base_url").value = p.base_url;
+      fillModelSelect([], "");
+      if (p.base_url && !p.needs_manual_url && providerSupported(p)) {
+        refreshModels().catch((e) => setStatus(String(e.message || e), false));
+      }
+    };
+    $("base_url").addEventListener("change", () => {
+      const matched = findProviderByUrl($("base_url").value.trim());
+      suppressProviderSync = true;
+      $("provider").value = matched ? matched.id : "custom";
+      suppressProviderSync = false;
+      updateProviderHint();
+      const p = matched || { api: "openai", needs_manual_url: false };
+      if ($("base_url").value.trim() && !String($("base_url").value).includes("{") && providerSupported(p)) {
+        refreshModels().catch((e) => setStatus(String(e.message || e), false));
+      }
+    });
+    $("model_select").onchange = () => {
+      if ($("model_select").value) $("model").value = $("model_select").value;
+    };
+    $("refreshModelsBtn").onclick = async () => {
+      try { await refreshModels(); } catch (e) { setStatus(String(e.message || e), false); }
+    };
+    $("saveBtn").onclick = async () => {
+      setStatus("保存中…");
+      $("saveBtn").disabled = true;
+      try {
+        const body = {
+          llm: {
+            base_url: $("base_url").value.trim(),
+            model: $("model").value.trim(),
+            api_key: $("api_key").value,
+          },
+          extraction: {
+            trigger_turns: Number($("trigger_turns").value),
+            trigger_idle_hours: Number($("trigger_idle_hours").value),
+          },
+          embedding: {
+            resident: $("resident").value,
+            query_instruction: $("query_instruction").value,
+          },
+        };
+        const res = await fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "保存失败");
+        setStatus(data.message || "已保存", true);
+        $("api_key").value = "";
+        await loadConfig();
+        await loadDoctor();
+      } catch (e) {
+        setStatus(String(e.message || e), false);
+      } finally {
+        $("saveBtn").disabled = false;
+      }
+    };
+    $("probeBtn").onclick = async () => {
+      setStatus("探测中…");
+      try {
+        const res = await fetch("/api/probe", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "探测失败");
+        setStatus(data.message || "探测成功", true);
+      } catch (e) {
+        setStatus(String(e.message || e), false);
+      }
+    };
+    $("doctorBtn").onclick = async () => {
+      try {
+        await loadDoctor();
+        setStatus("状态已刷新", true);
+      } catch (e) {
+        setStatus(String(e.message || e), false);
+      }
+    };
+    Promise.all([loadProviders(), loadConfig(), loadDoctor()])
+      .catch((e) => setStatus(String(e.message || e), false));
+  </script>
+</body>
+</html>

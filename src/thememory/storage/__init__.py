@@ -1,1 +1,5 @@
-"""SQLite storage, migrations, and repositories."""
+"""SQLite storage layer."""
+
+from thememory.storage.db import Database
+
+__all__ = ["Database"]

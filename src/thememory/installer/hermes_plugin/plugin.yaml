@@ -1,0 +1,3 @@
+name: thememory
+version: 0.1.0
+description: "TheMemory — local long-term memory daemon (SQLite + MCP/IPC)."
