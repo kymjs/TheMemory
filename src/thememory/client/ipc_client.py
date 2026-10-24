@@ -36,13 +36,21 @@ class IpcClient:
         self._sock: socket.socket | None = None
         self._token: str | None = None
         self._file: Any = None
+        self._did_restart = False
 
     def connect(self, *, autostart: bool | None = None) -> None:
         if autostart is None:
             autostart = self.autostart
+        hello = self._connect_with_retry(autostart=autostart)
+        if hello.get("restart_required") and not self._did_restart:
+            self._replace_daemon()
+            hello = self._connect_with_retry(autostart=True)
+            if hello.get("restart_required"):
+                raise IpcError("restart_required", code=1001, data=hello)
+
+    def _connect_with_retry(self, *, autostart: bool) -> dict[str, Any]:
         try:
-            self._connect_once()
-            return
+            return self._connect_once()
         except OSError:
             if not autostart:
                 raise
@@ -51,14 +59,24 @@ class IpcClient:
         last: Exception | None = None
         while time.time() < deadline:
             try:
-                self._connect_once()
-                return
+                return self._connect_once()
             except OSError as exc:
                 last = exc
                 time.sleep(0.1)
         raise IpcError(f"cannot connect to thememoryd: {last}")
 
-    def _connect_once(self) -> None:
+    def _replace_daemon(self) -> None:
+        """Ask an incompatible daemon to exit, then start the current build (spec §12.6)."""
+        self._did_restart = True
+        try:
+            self.request("admin.shutdown", {"drain": True})
+        except Exception:  # noqa: BLE001
+            pass
+        self.close()
+        time.sleep(0.4)
+        self._try_start_daemon()
+
+    def _connect_once(self) -> dict[str, Any]:
         if sys.platform == "win32":
             ep = endpoint_path(self.root)
             if not ep.exists():
@@ -78,11 +96,7 @@ class IpcClient:
             "hello",
             {"client_version": __version__, "protocol_version": PROTOCOL_VERSION},
         )
-        if hello.get("restart_required"):
-            raise IpcError("restart_required", code=1001, data=hello)
-        if hello.get("state") == "initializing":
-            # still usable for degraded ops
-            pass
+        return hello
 
     def _try_start_daemon(self) -> None:
         spawn_daemon(home=self.root)

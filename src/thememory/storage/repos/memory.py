@@ -210,21 +210,28 @@ class MemoryRepo:
         args.append(limit)
         return [_row_to_item(r) for r in self.conn.execute(sql, args).fetchall()]
 
-    def search_fts(self, query: str, limit: int = 20) -> list[tuple[dict[str, Any], float]]:
+    def search_fts(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        statuses: tuple[str, ...] = ("active",),
+    ) -> list[tuple[dict[str, Any], float]]:
         if not query.strip():
             return []
         # escape FTS special chars simply by quoting
         q = '"' + query.replace('"', " ") + '"'
+        marks = ",".join("?" * len(statuses))
         rows = self.conn.execute(
-            """
+            f"""
             SELECT m.*, bm25(item_fts) AS score
             FROM item_fts
             JOIN memory_items m ON m.seq = item_fts.rowid
-            WHERE item_fts MATCH ? AND m.status = 'active'
+            WHERE item_fts MATCH ? AND m.status IN ({marks})
             ORDER BY score
             LIMIT ?
             """,
-            (q, limit),
+            (q, *statuses, limit),
         ).fetchall()
         out: list[tuple[dict[str, Any], float]] = []
         for row in rows:
@@ -277,9 +284,26 @@ class MemoryRepo:
             (item_id, type_, utc_now(), chash, model_id, dim, vector),
         )
 
+    def list_evidence(self, item_id: str) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT item_id, turn_id, role, quote FROM item_evidence WHERE item_id=? ORDER BY turn_id",
+            (item_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def known_item_ids(self) -> set[str]:
+        rows = self.conn.execute("SELECT id FROM memory_items").fetchall()
+        return {str(r["id"]) for r in rows}
+
     def tombstone_hashes(self) -> set[str]:
         rows = self.conn.execute("SELECT content_hash FROM tombstones").fetchall()
         return {r["content_hash"] for r in rows}
+
+    def tombstone_fingerprints(self) -> list[tuple[bytes, int]]:
+        rows = self.conn.execute(
+            "SELECT fp_vector, dim FROM tombstones WHERE fp_vector IS NOT NULL AND dim IS NOT NULL"
+        ).fetchall()
+        return [(r["fp_vector"], int(r["dim"])) for r in rows]
 
     def record_change(
         self,
@@ -290,17 +314,19 @@ class MemoryRepo:
         proposal: Any = None,
         result: Any = None,
         reason: str | None = None,
+        prompt_version: str | None = None,
     ) -> None:
         self.conn.execute(
             """
-            INSERT INTO changes(ts, item_id, op, actor, proposal, result, reason)
-            VALUES (?,?,?,?,?,?,?)
+            INSERT INTO changes(ts, item_id, op, actor, prompt_version, proposal, result, reason)
+            VALUES (?,?,?,?,?,?,?,?)
             """,
             (
                 utc_now(),
                 item_id,
                 op,
                 actor,
+                prompt_version,
                 json.dumps(proposal, ensure_ascii=False) if proposal is not None else None,
                 json.dumps(result, ensure_ascii=False) if result is not None else None,
                 reason,
@@ -341,8 +367,12 @@ class MemoryRepo:
         return int(cur.lastrowid)
 
     def claim_jobs(self, kind: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
-        sql = "SELECT * FROM jobs WHERE status = 'pending' "
-        args: list[Any] = []
+        now = utc_now()
+        sql = (
+            "SELECT * FROM jobs WHERE status = 'pending' "
+            "AND (next_run_at IS NULL OR next_run_at <= ?) "
+        )
+        args: list[Any] = [now]
         if kind:
             sql += "AND kind = ? "
             args.append(kind)
@@ -359,6 +389,49 @@ class MemoryRepo:
             d["payload"] = json.loads(d["payload"])
             out.append(d)
         return out
+
+    def requeue_job(
+        self,
+        job_id: int,
+        error: str | None = None,
+        *,
+        next_run_at: str | None = None,
+    ) -> None:
+        self.conn.execute(
+            """
+            UPDATE jobs
+            SET status='pending', last_error=?, next_run_at=?, updated_at=?
+            WHERE id=?
+            """,
+            (error, next_run_at, utc_now(), job_id),
+        )
+
+    def usage_tokens_since(self, since: str) -> int:
+        row = self.conn.execute(
+            """
+            SELECT COALESCE(SUM(COALESCE(prompt_tokens,0)+COALESCE(completion_tokens,0)),0) AS n
+            FROM usage_log WHERE ts >= ?
+            """,
+            (since,),
+        ).fetchone()
+        return int(row["n"])
+
+    def log_usage(
+        self,
+        *,
+        purpose: str,
+        model: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        ok: bool,
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO usage_log(ts, purpose, model, prompt_tokens, completion_tokens, ok, latency_ms)
+            VALUES (?,?,?,?,?,?,?)
+            """,
+            (utc_now(), purpose, model, prompt_tokens, completion_tokens, 1 if ok else 0, None),
+        )
 
     def finish_job(self, job_id: int, ok: bool, error: str | None = None) -> None:
         self.conn.execute(
@@ -454,6 +527,272 @@ class MemoryRepo:
     def max_seq(self) -> int:
         row = self.conn.execute("SELECT COALESCE(MAX(seq),0) AS m FROM memory_items").fetchone()
         return int(row["m"])
+
+    def count_session_writes(
+        self,
+        *,
+        host: str,
+        session_ref: str,
+        since: str | None = None,
+        type_: str | None = None,
+    ) -> int:
+        sql = """
+            SELECT COUNT(*) AS c FROM memory_items
+            WHERE source_host=? AND source_session=? AND status != 'deleted'
+        """
+        args: list[Any] = [host, session_ref]
+        if since:
+            sql += " AND created_at >= ?"
+            args.append(since)
+        if type_:
+            sql += " AND type = ?"
+            args.append(type_)
+        row = self.conn.execute(sql, args).fetchone()
+        return int(row["c"])
+
+    def list_open_sessions(self) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM sessions WHERE ended_at IS NULL ORDER BY last_event_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def enqueue_inbox(
+        self, *, host: str, idem_key: str, payload: dict[str, Any]
+    ) -> bool:
+        """Insert inbox row; return False if idem_key already exists."""
+        try:
+            self.conn.execute(
+                """
+                INSERT INTO inbox(received_at, host, idem_key, payload, status)
+                VALUES (?,?,?,?,'pending')
+                """,
+                (utc_now(), host, idem_key, json.dumps(payload, ensure_ascii=False)),
+            )
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def claim_inbox(self, limit: int = 20) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            """
+            SELECT * FROM inbox WHERE status='pending' ORDER BY id ASC LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            self.conn.execute(
+                "UPDATE inbox SET status='running' WHERE id=?",
+                (row["id"],),
+            )
+            d = dict(row)
+            d["payload"] = json.loads(d["payload"])
+            out.append(d)
+        return out
+
+    def finish_inbox(self, inbox_id: int, *, ok: bool) -> None:
+        self.conn.execute(
+            "UPDATE inbox SET status=? WHERE id=?",
+            ("done" if ok else "failed", inbox_id),
+        )
+
+    def expire_plans(self, today: str) -> int:
+        """Turn plan items with valid_to < today into event. Returns count."""
+        rows = self.conn.execute(
+            """
+            SELECT id FROM memory_items
+            WHERE type='plan' AND status='active' AND valid_to IS NOT NULL AND valid_to < ?
+            """,
+            (today,),
+        ).fetchall()
+        n = 0
+        for row in rows:
+            self.update_item(row["id"], type="event")
+            self.record_change(item_id=row["id"], op="EXPIRE", actor="rule", reason="plan_past_valid_to")
+            n += 1
+        return n
+
+    def cleanup_candidates(self, cutoff: str) -> int:
+        """Retract candidates older than cutoff (ISO ts). Returns count."""
+        rows = self.conn.execute(
+            """
+            SELECT id FROM memory_items
+            WHERE status='candidate' AND created_at < ?
+            """,
+            (cutoff,),
+        ).fetchall()
+        n = 0
+        for row in rows:
+            self.update_item(row["id"], status="retracted", promoted=False)
+            self.record_change(
+                item_id=row["id"], op="RETRACT", actor="rule", reason="candidate_ttl"
+            )
+            n += 1
+        return n
+
+    def mark_contaminated(self, session_id: str) -> None:
+        self.conn.execute(
+            "UPDATE sessions SET contaminated=1, contaminated_at=? WHERE id=?",
+            (utc_now(), session_id),
+        )
+
+    def clear_contamination(self, session_id: str) -> None:
+        self.conn.execute(
+            "UPDATE sessions SET contaminated=0, contaminated_at=NULL WHERE id=?",
+            (session_id,),
+        )
+
+    def meta_get(self, key: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT value FROM daemon_meta WHERE key=?", (key,)
+        ).fetchone()
+        return str(row["value"]) if row else None
+
+    def meta_set(self, key: str, value: str) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO daemon_meta(key, value) VALUES (?,?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            (key, value),
+        )
+
+    def meta_delete(self, key: str) -> None:
+        self.conn.execute("DELETE FROM daemon_meta WHERE key=?", (key,))
+
+    def list_items(
+        self,
+        *,
+        type_: str | None = None,
+        scope: str | None = None,
+        status: str | None = None,
+        since: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM memory_items WHERE 1=1"
+        args: list[Any] = []
+        if type_:
+            sql += " AND type=?"
+            args.append(type_)
+        if scope:
+            sql += " AND scope=?"
+            args.append(scope)
+        if status:
+            sql += " AND status=?"
+            args.append(status)
+        if since:
+            sql += " AND created_at>=?"
+            args.append(since)
+        sql += " ORDER BY seq DESC LIMIT ?"
+        args.append(limit)
+        return [_row_to_item(r) for r in self.conn.execute(sql, args).fetchall()]
+
+    def recent_changes(self, *, since: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM changes WHERE 1=1"
+        args: list[Any] = []
+        if since:
+            sql += " AND ts>=?"
+            args.append(since)
+        sql += " ORDER BY id DESC LIMIT ?"
+        args.append(limit)
+        return [dict(r) for r in self.conn.execute(sql, args).fetchall()]
+
+    def recover_running_jobs(self) -> int:
+        cur = self.conn.execute(
+            "UPDATE jobs SET status='pending', last_error=?, updated_at=? WHERE status='running'",
+            ("recovered_after_restart", utc_now()),
+        )
+        return int(cur.rowcount or 0)
+
+    def items_changed_since(self, seq: int, updated_after: str | None) -> list[dict[str, Any]]:
+        if updated_after:
+            rows = self.conn.execute(
+                """
+                SELECT * FROM memory_items
+                WHERE seq > ? OR updated_at > ?
+                ORDER BY seq ASC
+                """,
+                (seq, updated_after),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM memory_items WHERE seq > ? ORDER BY seq ASC",
+                (seq,),
+            ).fetchall()
+        return [_row_to_item(r) for r in rows]
+
+    def recent_summaries(self, limit: int = 3) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            """
+            SELECT id, summary, summary_at FROM sessions
+            WHERE summary IS NOT NULL AND summary != ''
+            ORDER BY summary_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def latest_ledger_item(self, session_id: str) -> str | None:
+        row = self.conn.execute(
+            """
+            SELECT item_id FROM injection_ledger
+            WHERE session_id=?
+            ORDER BY injected_at DESC
+            LIMIT 1
+            """,
+            (session_id,),
+        ).fetchone()
+        return str(row["item_id"]) if row else None
+
+    def degrade_counts(self, limit: int = 20) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            """
+            SELECT component, reason, COUNT(*) AS n
+            FROM degrade_events
+            GROUP BY component, reason
+            ORDER BY n DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def recent_injections(self, limit: int = 10) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            """
+            SELECT l.session_id, l.item_id, l.channel, l.injected_at,
+                   substr(m.content, 1, 120) AS content
+            FROM injection_ledger l
+            LEFT JOIN memory_items m ON m.id = l.item_id
+            ORDER BY l.injected_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def recent_harm(self, limit: int = 5) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            """
+            SELECT ts, item_id, op, actor, reason
+            FROM changes
+            WHERE op IN ('CORRECT', 'FORGET', 'RETRACT', 'HARM')
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def count_harm_signals(self) -> int:
+        row = self.conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM changes
+            WHERE op IN ('CORRECT','FORGET','RETRACT','HARM')
+            """
+        ).fetchone()
+        return int(row["c"])
 
 
 def pack_vector(vec: list[float]) -> bytes:

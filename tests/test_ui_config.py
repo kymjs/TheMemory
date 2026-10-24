@@ -61,6 +61,36 @@ def test_providers_catalog_has_deepseek() -> None:
     assert anthropic["base_url"] == "https://api.anthropic.com"
 
 
+def test_fetch_models_catalog_and_api_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    providers = {p["id"]: p for p in load_providers()["providers"]}
+
+    def boom(**_kwargs: object) -> list[str]:
+        raise AssertionError("api=none must not call the network")
+
+    monkeypatch.setattr("thememory.ui.app.list_models", boom)
+    google = providers["google"]
+    assert google["api"] == "none"
+    assert fetch_models(
+        base_url=google["base_url"],
+        api_key="x",
+        api="none",
+        catalog=google["models"],
+    ) == google["models"]
+    with pytest.raises(RuntimeError, match="兼容网关"):
+        fetch_models(base_url="https://example.invalid", api_key="x", api="none")
+
+    monkeypatch.setattr("thememory.ui.app.list_models", lambda **_kwargs: ["live-only"])
+    deepseek = providers["deepseek"]
+    merged = fetch_models(
+        base_url=deepseek["base_url"],
+        api_key="x",
+        api="openai",
+        catalog=deepseek["models"],
+    )
+    assert merged[0] == "deepseek-chat"
+    assert "live-only" in merged
+
+
 def test_fetch_models_rejects_placeholder() -> None:
     with pytest.raises(RuntimeError, match="占位符"):
         fetch_models(

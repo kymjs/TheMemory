@@ -106,6 +106,42 @@ def _validate_section(path: str, value: dict[str, Any], template: dict[str, Any]
             _validate_section(f"{path}.{key}", child, expected)
 
 
+def _stamp_sources(node: dict[str, Any], prefix: str, sources: dict[str, str], label: str) -> None:
+    for key, value in node.items():
+        path = f"{prefix}.{key}" if prefix else str(key)
+        if isinstance(value, dict) and value:
+            _stamp_sources(value, path, sources, label)
+        else:
+            sources[path] = label
+
+
+def explain_config(root: Path | None = None) -> dict[str, Any]:
+    """Dotted key → default/file/env, plus a parse or validate error (spec §15.1 / §18.1)."""
+    path = config_path(root)
+    file_cfg: dict[str, Any] = {}
+    error: str | None = None
+    if path.exists():
+        try:
+            with path.open("rb") as fh:
+                loaded = tomllib.load(fh)
+            if isinstance(loaded, dict):
+                file_cfg = loaded
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            error = f"{path.name}: {exc}"
+    sources: dict[str, str] = {}
+    _stamp_sources(DEFAULTS, "", sources, "default")
+    _stamp_sources(file_cfg, "", sources, "file")
+    _stamp_sources(_env_overrides(), "", sources, "env")
+    if error is None:
+        try:
+            merged = _deep_merge(DEFAULTS, file_cfg)
+            merged = _deep_merge(merged, _env_overrides())
+            validate(merged)
+        except ConfigError as exc:
+            error = str(exc)
+    return {"error": error, "sources": sources}
+
+
 def load(root: Path | None = None) -> dict[str, Any]:
     ensure_layout(root)
     path = config_path(root)

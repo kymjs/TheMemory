@@ -141,6 +141,19 @@ def main():
         elif args.event == "sessionEnd":
             _request("capture.event", {**params, "event": "session_end"})
             _out({})
+        elif args.event == "postToolUse":
+            tool = (
+                payload.get("tool_name")
+                or payload.get("toolName")
+                or payload.get("name")
+                or ""
+            )
+            if tool:
+                _request(
+                    "capture.event",
+                    {**params, "event": "tool_risk", "tool": str(tool)},
+                )
+            _out({})
         elif args.event == "stop":
             _out({})
         else:

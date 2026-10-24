@@ -109,7 +109,14 @@ CREATE TABLE sessions (
   extract_cursor   INTEGER NOT NULL DEFAULT 0,
   summary          TEXT,
   summary_at       TEXT,
+  contaminated     INTEGER NOT NULL DEFAULT 0,
+  contaminated_at  TEXT,
   UNIQUE (host, host_session_id)
+);
+
+CREATE TABLE daemon_meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 
 CREATE TABLE injection_ledger (

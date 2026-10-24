@@ -13,7 +13,14 @@ from typing import Any, Callable
 
 from thememory import PROTOCOL_VERSION, __version__
 from thememory.core.service import MemoryService
-from thememory.daemon.ipc.protocol import decode_line, encode_msg, err_result, ok_result
+from thememory.daemon.ipc.protocol import (
+    decode_line,
+    encode_msg,
+    err_result,
+    hello_handshake,
+    ok_result,
+)
+from thememory.daemon.scheduler import DaemonScheduler
 from thememory.paths import endpoint_path, lock_path, pid_path, run_dir, sock_path
 
 logger = logging.getLogger(__name__)
@@ -30,6 +37,7 @@ class DaemonServer:
         self._server_sock: socket.socket | None = None
         self._state = "initializing"
         self._lock_fh: Any = None
+        self._scheduler = DaemonScheduler(service, root=root, stop_event=self._stop)
 
     def acquire_lock(self) -> bool:
         run_dir(self.root).mkdir(parents=True, exist_ok=True)
@@ -90,8 +98,19 @@ class DaemonServer:
         sock.settimeout(0.5)
         self._server_sock = sock
         self._state = "ready"
+        from thememory.storage.repos.memory import MemoryRepo
+        from thememory.util import utc_now
+
+        MemoryRepo(self.service.db.read_memory()).meta_set("daemon_started_at", utc_now())
         threading.Thread(target=self._accept_loop, name="thememory-accept", daemon=True).start()
-        threading.Thread(target=self._job_loop, name="thememory-jobs", daemon=True).start()
+        self._scheduler.start()
+        # Run maintenance once at startup (spec §8.4 / §13.2)
+        try:
+            self.service.recover_jobs()
+            self.service.run_maintenance()
+            self.service.consume_inbox()
+        except Exception:  # noqa: BLE001
+            logger.exception("startup maintenance failed")
 
     def stop(self) -> None:
         self._stop.set()
@@ -114,14 +133,6 @@ class DaemonServer:
                     break
                 continue
             threading.Thread(target=self._handle_conn, args=(conn,), daemon=True).start()
-
-    def _job_loop(self) -> None:
-        while not self._stop.is_set():
-            try:
-                self.service.process_jobs(limit=5)
-            except Exception:  # noqa: BLE001
-                logger.exception("job loop error")
-            self._stop.wait(1.0)
 
     def _handle_conn(self, conn: socket.socket) -> None:
         try:
@@ -169,21 +180,12 @@ class DaemonServer:
     def dispatch(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         svc = self.service
         if method == "hello":
-            client_proto = int(params.get("protocol_version") or 0)
-            if client_proto and client_proto != PROTOCOL_VERSION:
-                return {
-                    "ok": False,
-                    "restart_required": True,
-                    "server_version": __version__,
-                    "protocol_version": PROTOCOL_VERSION,
-                    "state": self._state,
-                }
-            return {
-                "ok": True,
-                "server_version": __version__,
-                "protocol_version": PROTOCOL_VERSION,
-                "state": self._state,
-            }
+            return hello_handshake(
+                params,
+                server_version=__version__,
+                server_protocol=PROTOCOL_VERSION,
+                state=self._state,
+            )
         if method == "tool.remember":
             return svc.remember(params)
         if method == "tool.search":
@@ -213,6 +215,40 @@ class DaemonServer:
             }
         if method == "admin.doctor":
             return svc.doctor()
+        if method == "admin.probe":
+            return svc.run_capability_probe()
+        if method == "admin.benchmark":
+            from thememory.installer.benchmark import run_benchmark
+
+            return run_benchmark(self.root, write=bool(params.get("write", True)))
+        if method == "admin.import_host":
+            from pathlib import Path
+
+            from thememory.installer.host_import import import_host_memories
+
+            pr = params.get("project_root")
+            return import_host_memories(
+                host=str(params.get("host") or "claude-code"),
+                project_root=Path(pr) if pr else None,
+                root=self.root,
+                dry_run=bool(params.get("dry_run")),
+                service=svc,
+            )
+        if method == "admin.eval_retrieval":
+            from pathlib import Path
+
+            from thememory.eval.runner import run_retrieval_eval
+
+            fix = params.get("fixture")
+            # Eval uses an isolated temp root to avoid polluting live DB
+            import tempfile
+
+            tmp = Path(tempfile.mkdtemp(prefix="thememory-eval-"))
+            return run_retrieval_eval(
+                fixture=Path(fix) if fix else None,
+                root=tmp,
+                k=int(params.get("k") or 3),
+            )
         if method == "admin.extract_now":
             sid = params.get("session_id")
             if not sid and params.get("session_ref"):
@@ -222,12 +258,39 @@ class DaemonServer:
                 raise ValueError("session_id required")
             return svc.run_extract(str(sid))
         if method == "admin.shutdown":
-            return {"ok": True}
+            if params.get("drain"):
+                try:
+                    svc.process_jobs(limit=20)
+                except Exception:  # noqa: BLE001
+                    logger.exception("drain jobs before shutdown")
+            return {"ok": True, "drain": bool(params.get("drain"))}
         if method == "admin.reload":
             from thememory.config import load
 
             svc.reload_config(load(self.root))
             return {"ok": True}
+        if method == "admin.backup":
+            return svc.run_db_backup()
+        if method == "admin.pause":
+            until = params.get("until") or "forever"
+            return svc.set_pause(until=str(until))
+        if method == "admin.resume":
+            return svc.set_pause(until=None)
+        if method == "admin.purge":
+            return svc.purge(params)
+        if method == "admin.memory_list":
+            return svc.list_memory(params)
+        if method == "admin.memory_show":
+            return svc.show_memory(params)
+        if method == "admin.memory_log":
+            return svc.memory_log(params)
+        if method == "admin.turns_search":
+            return svc.search_turns(params)
+        if method == "admin.maintenance":
+            return {
+                "maintenance": svc.run_maintenance(),
+                "evict": svc.maybe_evict_turns(),
+            }
         raise KeyError(method)
 
 

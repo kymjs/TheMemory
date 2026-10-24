@@ -49,6 +49,11 @@ def host_backups_dir(root: Path | None = None) -> Path:
     return (root or home_dir()) / "host_backups"
 
 
+def backups_dir(root: Path | None = None) -> Path:
+    """Periodic SQLite snapshots of memory.db / turns.db (spec §13.6)."""
+    return (root or home_dir()) / "backups"
+
+
 def sock_path(root: Path | None = None) -> Path:
     return run_dir(root) / "thememory.sock"
 
@@ -75,6 +80,7 @@ def ensure_layout(root: Path | None = None) -> Path:
         run_dir(base),
         logs_dir(base),
         host_backups_dir(base),
+        backups_dir(base),
         base / "prompts",
     ):
         path.mkdir(parents=True, exist_ok=True)

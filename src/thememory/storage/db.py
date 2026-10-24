@@ -14,14 +14,17 @@ from thememory.util import utc_now
 
 T = TypeVar("T")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _MIGRATIONS = Path(__file__).resolve().parent / "migrations"
 
 
-def _connect(path: Path) -> sqlite3.Connection:
+def _connect(path: Path, *, incremental_vacuum: bool = False) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
+    fresh = not path.exists() or path.stat().st_size == 0
     conn = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
     conn.row_factory = sqlite3.Row
+    if fresh and incremental_vacuum:
+        conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
@@ -43,11 +46,30 @@ def migrate_memory(conn: sqlite3.Connection) -> None:
             (SCHEMA_VERSION, utc_now()),
         )
         return
-    ver = conn.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()["v"]
-    if ver is None:
+    ver = conn.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()["v"] or 0
+    if ver < 2:
+        # Idempotent column adds for DBs created at v1
+        cols = {
+            r[1]
+            for r in conn.execute("PRAGMA table_info(sessions)").fetchall()
+        }
+        if "contaminated" not in cols:
+            conn.execute(
+                "ALTER TABLE sessions ADD COLUMN contaminated INTEGER NOT NULL DEFAULT 0"
+            )
+        if "contaminated_at" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN contaminated_at TEXT")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS daemon_meta (
+              key   TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            )
+            """
+        )
         conn.execute(
             "INSERT INTO schema_version(version, applied_at) VALUES (?, ?)",
-            (SCHEMA_VERSION, utc_now()),
+            (2, utc_now()),
         )
 
 
@@ -70,7 +92,7 @@ class Database:
         ensure_layout(root)
         self.root = root
         self.memory = _connect(memory_db_path(root))
-        self.turns = _connect(turns_db_path(root))
+        self.turns = _connect(turns_db_path(root), incremental_vacuum=True)
         self._write_lock = threading.Lock()
         migrate_memory(self.memory)
         migrate_turns(self.turns)

@@ -99,12 +99,37 @@ class TurnsRepo:
             turn_ids,
         )
 
+    def fetch_by_ids(self, turn_ids: list[str]) -> list[dict[str, Any]]:
+        if not turn_ids:
+            return []
+        marks = ",".join("?" * len(turn_ids))
+        rows = self.conn.execute(
+            f"SELECT * FROM turns WHERE id IN ({marks})",
+            turn_ids,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def count_unextracted(self, session_id: str) -> int:
         row = self.conn.execute(
             "SELECT COUNT(*) AS c FROM turns WHERE session_id=? AND extracted=0",
             (session_id,),
         ).fetchone()
         return int(row["c"])
+
+    def unextracted_other(
+        self, session_id: str, *, since: str, limit: int = 6
+    ) -> list[dict[str, Any]]:
+        """User turns still unextracted in other sessions (spec §10.4)."""
+        rows = self.conn.execute(
+            """
+            SELECT * FROM turns
+            WHERE session_id != ? AND extracted = 0 AND role = 'user'
+              AND content IS NOT NULL AND evicted = 0 AND created_at >= ?
+            ORDER BY seq DESC LIMIT ?
+            """,
+            (session_id, since, limit),
+        ).fetchall()
+        return list(reversed([dict(r) for r in rows]))
 
     def unextracted_preview(self, session_id: str, limit: int = 6) -> list[dict[str, Any]]:
         rows = self.conn.execute(
@@ -116,3 +141,69 @@ class TurnsRepo:
             (session_id, limit),
         ).fetchall()
         return list(reversed([dict(r) for r in rows]))
+
+    def search_fts(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            """
+            SELECT t.*, bm25(turns_fts) AS score
+            FROM turns_fts
+            JOIN turns t ON t.seq = turns_fts.rowid
+            WHERE turns_fts MATCH ? AND t.content IS NOT NULL
+            ORDER BY score
+            LIMIT ?
+            """,
+            (query, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_protected(self, turn_ids: list[str]) -> int:
+        if not turn_ids:
+            return 0
+        placeholders = ",".join("?" * len(turn_ids))
+        cur = self.conn.execute(
+            f"UPDATE turns SET protected=1 WHERE id IN ({placeholders})",
+            turn_ids,
+        )
+        return int(cur.rowcount or 0)
+
+    def used_bytes(self) -> int:
+        try:
+            page_count = self.conn.execute("PRAGMA page_count").fetchone()[0]
+            freelist = self.conn.execute("PRAGMA freelist_count").fetchone()[0]
+            page_size = self.conn.execute("PRAGMA page_size").fetchone()[0]
+            return int((page_count - freelist) * page_size)
+        except Exception:  # noqa: BLE001
+            return 0
+
+    def evict_oldest(self, *, target_bytes: int) -> int:
+        """Null out oldest unprotected extracted turns until under target. Returns count."""
+        n = 0
+        while self.used_bytes() > target_bytes:
+            row = self.conn.execute(
+                """
+                SELECT seq, id FROM turns
+                WHERE content IS NOT NULL AND extracted=1 AND protected=0 AND evicted=0
+                ORDER BY seq ASC LIMIT 1
+                """
+            ).fetchone()
+            if not row:
+                break
+            self.conn.execute(
+                "UPDATE turns SET content=NULL, evicted=1 WHERE id=?",
+                (row["id"],),
+            )
+            try:
+                self.conn.execute(
+                    "INSERT INTO turns_fts(turns_fts, rowid, content) VALUES('delete', ?, NULL)",
+                    (row["seq"],),
+                )
+            except sqlite3.Error:
+                pass
+            n += 1
+            if n > 5000:
+                break
+        try:
+            self.conn.execute("PRAGMA incremental_vacuum(64)")
+        except sqlite3.Error:
+            pass
+        return n

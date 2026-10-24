@@ -37,10 +37,12 @@ packages = ["src/thememory"]
 [tool.hatch.build.targets.wheel.force-include]
 "src/thememory/storage/migrations/001_initial.sql" = "thememory/storage/migrations/001_initial.sql"
 "src/thememory/storage/migrations/001_turns.sql" = "thememory/storage/migrations/001_turns.sql"
+"src/thememory/storage/migrations/002_session_flags.sql" = "thememory/storage/migrations/002_session_flags.sql"
 "src/thememory/ui/page.html" = "thememory/ui/page.html"
 "src/thememory/ui/providers.json" = "thememory/ui/providers.json"
 "src/thememory/installer/hermes_plugin/plugin.yaml" = "thememory/installer/hermes_plugin/plugin.yaml"
 "src/thememory/installer/hermes_plugin/__init__.py" = "thememory/installer/hermes_plugin/__init__.py"
+"src/thememory/eval/fixtures/retrieval_zh.json" = "thememory/eval/fixtures/retrieval_zh.json"
 
 [tool.uv]
 default-groups = ["dev"]

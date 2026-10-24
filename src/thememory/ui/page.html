@@ -280,11 +280,25 @@
       else notes.push("此提供方无内置 OpenAI/Anthropic 协议；请改用兼容网关，或选自定义并填写兼容 Base URL。");
       $("provider_hint").textContent = notes.join(" ") || "选择后会自动填写 Base URL。";
     }
+    function providerCatalog(p) {
+      return (p && Array.isArray(p.models)) ? p.models.filter(Boolean) : [];
+    }
     async function refreshModels() {
       const base_url = $("base_url").value.trim();
       if (!base_url) throw new Error("请先填写 Base URL");
       if (base_url.includes("{")) throw new Error("Base URL 仍含占位符，请先改成完整地址");
       const p = providers.find((x) => x.id === $("provider").value);
+      const api = providerApi(p);
+      const catalog = providerCatalog(p);
+      const current = $("model").value.trim();
+      if (catalog.length) fillModelSelect(catalog, current);
+      if (api === "none") {
+        if (!catalog.length) {
+          throw new Error("此提供方没有内置协议，请改用兼容网关或直接填写模型名");
+        }
+        setStatus(`已使用目录中的 ${catalog.length} 个模型（此提供方不在线拉取）`, true);
+        return;
+      }
       setStatus("正在拉取模型列表…");
       const res = await fetch("/api/models", {
         method: "POST",
@@ -292,12 +306,12 @@
         body: JSON.stringify({
           base_url,
           api_key: $("api_key").value,
-          api: providerApi(p),
+          api,
+          catalog,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "拉取模型失败");
-      const current = $("model").value.trim();
       fillModelSelect(data.models || [], current);
       if (current && (data.models || []).includes(current)) {
         $("model_select").value = current;
@@ -317,7 +331,9 @@
       updateProviderHint();
       if (!p || p.id === "custom") return;
       if (p.base_url) $("base_url").value = p.base_url;
-      fillModelSelect([], "");
+      const catalog = providerCatalog(p);
+      fillModelSelect(catalog, "");
+      if (catalog.length && !providerSupported(p)) return;
       if (p.base_url && !p.needs_manual_url && providerSupported(p)) {
         refreshModels().catch((e) => setStatus(String(e.message || e), false));
       }

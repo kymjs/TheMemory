@@ -71,6 +71,7 @@ def _merge_hooks(data: dict) -> dict:
         "afterAgentResponse": [{"command": f"{base} afterAgentResponse", "timeout": 10}],
         "preCompact": [{"command": f"{base} preCompact", "timeout": 10}],
         "sessionEnd": [{"command": f"{base} sessionEnd", "timeout": 10}],
+        "postToolUse": [{"command": f"{base} postToolUse", "timeout": 5}],
     }
 
     def _is_thememory(entry: object) -> bool:

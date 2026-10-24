@@ -98,10 +98,31 @@ DEFAULTS: dict[str, Any] = {
         "crosscheck_method": "semantic",
         "crosscheck_min_similarity": 0.55,
         "crosscheck_min_overlap": 0.25,
+        "high_risk_tools": [
+            "WebFetch",
+            "WebSearch",
+            "Browser",
+            "browser",
+            "fetch",
+            "curl",
+            "ReadUrl",
+            "mcp_web",
+            "agent-browser",
+        ],
     },
     "isolation": {
         "profile": "shared",
         "procedural": "shared",
+    },
+    "backup": {
+        "interval_hours": 24,
+        "keep": 7,
+    },
+    "limits": {
+        "session_max_writes": 30,
+        "session_max_procedural": 5,
+        "burst_window_seconds": 60,
+        "burst_max_writes": 8,
     },
     "hosts": {
         "default": {
@@ -115,6 +136,9 @@ DEFAULTS: dict[str, Any] = {
         "deepseek-harness": {"procedural_write": True},
         "hermes": {"procedural_write": True},
         "cursor": {"procedural_write": True},
+        "workbuddy": {"procedural_write": False},
+        "doubao": {"procedural_write": False},
+        "eval": {"write": True, "read": True, "isolated": False, "procedural_write": True},
     },
 }
 
@@ -218,4 +242,14 @@ procedural_write = true
 
 [hosts.deepseek-harness]
 procedural_write = true
+
+[backup]
+interval_hours = 24
+keep = 7
+
+[limits]
+session_max_writes = 30
+session_max_procedural = 5
+burst_window_seconds = 60
+burst_max_writes = 8
 """

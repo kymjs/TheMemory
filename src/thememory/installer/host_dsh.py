@@ -11,6 +11,10 @@ from thememory.paths import host_backups_dir
 
 BEGIN = "# >>> thememory (managed) >>>"
 END = "# <<< thememory <<<"
+INSTALL_PROMPT = (
+    "请执行 `thememory install deepseek-harness`，把 TheMemory 接成 MCP。"
+    "不要覆盖已有的 cordis 补丁；安装器会备份并幂等合并。"
+)
 
 
 def dsh_home() -> Path:
@@ -98,6 +102,7 @@ def install(profile: str | None = None) -> Path:
     elsewhere = [patch_path()] if profile else []
     if _has_client_row(text) or any(_client_row_in(other) for other in elsewhere):
         path.write_text(text.rstrip() + "\n" if text.strip() else "[]\n", encoding="utf-8")
+        _write_prompt(path)
         return path
     stripped = text.strip()
     if stripped in {"", "[]"}:
@@ -105,7 +110,13 @@ def install(profile: str | None = None) -> Path:
     else:
         new_text = text.rstrip() + "\n" + _managed_entries()
     path.write_text(new_text, encoding="utf-8")
+    _write_prompt(path)
     return path
+
+
+def _write_prompt(path: Path) -> None:
+    prompt = path.parent / "thememory-install-prompt.txt"
+    prompt.write_text(INSTALL_PROMPT + "\n", encoding="utf-8")
 
 
 def uninstall(profile: str | None = None) -> None:

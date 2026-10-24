@@ -73,7 +73,8 @@
       "base_url": "https://api.deepseek.com/v1",
       "api": "openai",
       "openai_compat": true,
-      "needs_manual_url": false
+      "needs_manual_url": false,
+      "models": ["deepseek-chat", "deepseek-reasoner"]
     },
     {
       "id": "fireworks",
@@ -97,7 +98,8 @@
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
       "api": "none",
       "openai_compat": false,
-      "needs_manual_url": false
+      "needs_manual_url": false,
+      "models": ["gemini-2.5-flash", "gemini-2.5-pro"]
     },
     {
       "id": "google-vertex",

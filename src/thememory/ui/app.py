@@ -43,14 +43,31 @@ def fetch_models(
     base_url: str,
     api_key: str,
     api: str | None = None,
+    catalog: list[str] | None = None,
     timeout_s: float = 30.0,
 ) -> list[str]:
-    return list_models(
-        base_url=base_url,
-        api_key=api_key,
-        api=api,
-        timeout_s=timeout_s,
-    )
+    """Catalog first. api=none never calls the network (spec: use a gateway)."""
+    known = [str(name) for name in (catalog or []) if str(name).strip()]
+    if api == "none":
+        if not known:
+            raise RuntimeError("此提供方没有 OpenAI/Anthropic 协议，请改用兼容网关或直接填写模型名")
+        return known
+    try:
+        live = list_models(
+            base_url=base_url,
+            api_key=api_key,
+            api=api,
+            timeout_s=timeout_s,
+        )
+    except Exception:
+        if known:
+            return known
+        raise
+    merged: list[str] = []
+    for name in known + live:
+        if name not in merged:
+            merged.append(name)
+    return merged
 
 
 def _public_config(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -236,10 +253,16 @@ def make_handler(root: Path | None) -> type[BaseHTTPRequestHandler]:
                         api_key=str(body.get("api_key") or "") or None,
                         root=root,
                     )
+                    raw_catalog = body.get("catalog") or []
+                    if isinstance(raw_catalog, list):
+                        catalog = [str(name) for name in raw_catalog]
+                    else:
+                        catalog = []
                     models = fetch_models(
                         base_url=base_url,
                         api_key=key,
                         api=str(body.get("api") or "") or None,
+                        catalog=catalog,
                     )
                     self._send(
                         200,

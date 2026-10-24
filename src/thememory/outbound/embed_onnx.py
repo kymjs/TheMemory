@@ -30,13 +30,23 @@ class OnnxEmbedder:
         self._tokenizer = None
         self._load_error: str | None = None
 
+    def files_present(self) -> bool:
+        return (self.model_dir / "model.onnx").exists() and (self.model_dir / "tokenizer.json").exists()
+
+    def loaded(self) -> bool:
+        return self._session is not None
+
+    def unload(self) -> None:
+        self._session = None
+        self._tokenizer = None
+
     def available(self) -> bool:
         return self._ensure() is not None
 
     def _ensure(self) -> object | None:
         if self._session is not None:
             return self._session
-        onnx_path = self.model_dir / "model.onnx"
+        onnx_path = active_onnx_path(self.model_dir)
         tok_path = self.model_dir / "tokenizer.json"
         if not onnx_path.exists() or not tok_path.exists():
             self._load_error = f"model files missing under {self.model_dir}"
@@ -131,3 +141,41 @@ def verify_manifest(model_dir: Path) -> bool:
 
 def onnx_path_ok(model_dir: Path) -> bool:
     return (model_dir / "model.onnx").exists() and (model_dir / "tokenizer.json").exists()
+
+
+OPT_ONNX_NAME = "model.opt.onnx"
+
+
+def active_onnx_path(model_dir: Path) -> Path:
+    """Prefer a fresh portable optimized graph when setup has written one."""
+    src = model_dir / "model.onnx"
+    opt = model_dir / OPT_ONNX_NAME
+    if opt.is_file() and src.is_file() and opt.stat().st_mtime >= src.stat().st_mtime:
+        return opt
+    return src
+
+
+def optimize_onnx(model_dir: Path) -> dict[str, object]:
+    """Write model.opt.onnx with ORT_ENABLE_EXTENDED (portable; spec §16.2 / §19.2)."""
+    src = model_dir / "model.onnx"
+    dest = model_dir / OPT_ONNX_NAME
+    if not src.is_file():
+        return {"status": "failed", "reason": "model_missing"}
+    if dest.is_file() and dest.stat().st_size > 0 and dest.stat().st_mtime >= src.stat().st_mtime:
+        return {"status": "ok", "skipped": True, "path": str(dest)}
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return {"status": "failed", "reason": "onnxruntime_missing"}
+    opts = ort.SessionOptions()
+    # EXTENDED stays portable across machines. ORT_ENABLE_ALL may bake in hardware layouts.
+    opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+    opts.optimized_model_filepath = str(dest)
+    try:
+        ort.InferenceSession(str(src), sess_options=opts, providers=["CPUExecutionProvider"])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("onnx optimize failed: %s", exc)
+        return {"status": "failed", "reason": "optimize_failed", "detail": str(exc)}
+    if not dest.is_file():
+        return {"status": "failed", "reason": "optimize_failed"}
+    return {"status": "ok", "skipped": False, "path": str(dest), "level": "ORT_ENABLE_EXTENDED"}

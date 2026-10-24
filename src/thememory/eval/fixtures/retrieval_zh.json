@@ -1,0 +1,103 @@
+{
+  "description": "Minimal Chinese retrieval fixture for M4 scaffolding",
+  "items": [
+    {
+      "id": "m1",
+      "content": "用户偏好简洁、代码优先的回答",
+      "type": "preference",
+      "keywords": ["简洁", "代码优先"],
+      "aliases": ["简短回答"]
+    },
+    {
+      "id": "m2",
+      "content": "用户计划于2026-10-28至2026-11-01前往天津",
+      "type": "plan",
+      "keywords": ["天津", "出行"],
+      "aliases": ["去天津"]
+    },
+    {
+      "id": "m3",
+      "content": "用户常住上海",
+      "type": "profile_fact",
+      "keywords": ["上海", "常住"],
+      "aliases": []
+    },
+    {
+      "id": "m4",
+      "content": "该项目使用 PostgreSQL 15",
+      "type": "note",
+      "keywords": ["PostgreSQL"],
+      "aliases": ["postgres"]
+    },
+    {
+      "id": "m5",
+      "content": "用户称呼为张涛，希望被称作主人",
+      "type": "profile_fact",
+      "keywords": ["张涛", "称呼"],
+      "aliases": ["主人"]
+    },
+    {
+      "id": "m6",
+      "content": "用户偏好使用 Python 3.12 与 uv",
+      "type": "preference",
+      "keywords": ["Python", "uv"],
+      "aliases": ["工具链"]
+    },
+    {
+      "id": "m7",
+      "content": "提交前需要运行静态检查",
+      "type": "procedural",
+      "keywords": ["lint", "静态检查"],
+      "aliases": ["提交检查"]
+    },
+    {
+      "id": "m8",
+      "content": "用户避免在回答里使用表情符号",
+      "type": "preference",
+      "keywords": ["表情", "禁忌"],
+      "aliases": ["emoji"]
+    }
+  ],
+  "queries": [
+    {
+      "query": "回答要简洁一点",
+      "relevant": ["m1"]
+    },
+    {
+      "query": "天津行程",
+      "relevant": ["m2"]
+    },
+    {
+      "query": "我住哪里",
+      "relevant": ["m3"]
+    },
+    {
+      "query": "数据库用什么",
+      "relevant": ["m4"]
+    },
+    {
+      "query": "今天天气怎么样",
+      "relevant": []
+    },
+    {
+      "query": "怎么称呼我",
+      "relevant": ["m5"]
+    },
+    {
+      "query": "项目用什么 Python 工具",
+      "relevant": ["m6"]
+    },
+    {
+      "query": "提交代码前要做什么",
+      "relevant": ["m7"]
+    },
+    {
+      "query": "能不能加表情",
+      "relevant": ["m8"]
+    },
+    {
+      "query": "帮我订外卖",
+      "relevant": []
+    }
+  ]
+}
