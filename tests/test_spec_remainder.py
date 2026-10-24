@@ -167,3 +167,8 @@ def test_counterfactual_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert cells["注入攻击"] == "correct_silence"
     assert "interference" not in report["counts"]
     assert all(row["without_memory_leaked"] is False for row in report["scenarios"])
+    from thememory.eval.scores import scores_path
+
+    lines = scores_path(tmp_path).read_text(encoding="utf-8").strip().splitlines()
+    assert lines
+    assert "counterfactual" in lines[-1]

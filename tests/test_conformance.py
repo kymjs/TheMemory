@@ -11,6 +11,7 @@ from thememory.core.service import MemoryService
 from thememory.installer.capabilities import HOST_CAPABILITIES
 from thememory.paths import ensure_layout
 from thememory.storage.db import Database
+from thememory.storage.repos.memory import MemoryRepo
 from thememory.storage.repos.turns import TurnsRepo
 
 HOSTS = list(HOST_CAPABILITIES)
@@ -112,3 +113,36 @@ def test_snapshot_frozen_and_forget_absent(svc: MemoryService, host: str) -> Non
     svc.forget({"host": host, "id": remembered["id"]})
     fresh = svc.inject_session_start({"host": host, "session_ref": "snap-2"})
     assert "深色主题" not in (fresh.get("block") or "")
+
+
+@pytest.mark.parametrize("host", HOSTS)
+def test_ledger_does_not_reinject(svc: MemoryService, host: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    remembered = svc.remember(
+        {
+            "host": host,
+            "origin": "user_requested",
+            "type": "preference",
+            "content": "用户偏好深色主题",
+            "session_ref": "led",
+        }
+    )
+    session = svc.ensure_session({"host": host, "session_ref": "led"})
+    item_id = str(remembered["id"])
+    svc.db.run_write(
+        "memory",
+        lambda conn: MemoryRepo(conn).ledger_add(session["id"], item_id, "per_turn"),
+    )
+
+    def _search(_params: dict) -> dict:
+        return {
+            "status": "ok",
+            "items": [{"id": item_id, "content": "用户偏好深色主题", "type": "preference"}],
+            "degraded_paths": [],
+        }
+
+    monkeypatch.setattr(svc, "search", _search)
+    again = svc.inject_per_turn(
+        {"host": host, "session_ref": "led", "user_message": "深色主题怎么配"}
+    )
+    assert again["item_count"] == 0
+    assert again["skipped_reason"] == "ledger_dedupe"

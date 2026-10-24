@@ -213,4 +213,17 @@ def run_counterfactual(root: Path | None) -> dict[str, Any]:
     counts: dict[str, int] = {}
     for row in rows:
         counts[row["cell"]] = counts.get(row["cell"], 0) + 1
-    return {"status": "ok", "scenarios": rows, "counts": counts}
+    summary = {"status": "ok", "scenarios": rows, "counts": counts}
+    if root is not None:
+        from thememory.eval.scores import append_score
+
+        append_score(
+            root,
+            {
+                "suite": "counterfactual",
+                "counts": counts,
+                "n": len(rows),
+                "leaked": sum(1 for row in rows if row.get("without_memory_leaked")),
+            },
+        )
+    return summary

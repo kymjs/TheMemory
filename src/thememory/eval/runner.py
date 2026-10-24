@@ -115,7 +115,7 @@ def run_retrieval_eval(
             }
         )
     db.close()
-    return {
+    summary = {
         "status": "ok",
         "fixture": str(path),
         "recall_at_k": sum(recalls) / len(recalls) if recalls else None,
@@ -125,3 +125,19 @@ def run_retrieval_eval(
         "n_queries": len(data.get("queries") or []),
         "details": details,
     }
+    if root is not None:
+        from thememory.eval.scores import append_score
+
+        append_score(
+            root,
+            {
+                "suite": "retrieval",
+                "fixture": summary["fixture"],
+                "recall_at_k": summary["recall_at_k"],
+                "mrr": summary["mrr"],
+                "empty_accuracy": summary["empty_accuracy"],
+                "k": summary["k"],
+                "n_queries": summary["n_queries"],
+            },
+        )
+    return summary

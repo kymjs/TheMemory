@@ -244,11 +244,26 @@ class DaemonServer:
             import tempfile
 
             tmp = Path(tempfile.mkdtemp(prefix="thememory-eval-"))
-            return run_retrieval_eval(
+            result = run_retrieval_eval(
                 fixture=Path(fix) if fix else None,
                 root=tmp,
                 k=int(params.get("k") or 3),
             )
+            from thememory.eval.scores import append_score
+
+            append_score(
+                self.root,
+                {
+                    "suite": "retrieval",
+                    "fixture": result.get("fixture"),
+                    "recall_at_k": result.get("recall_at_k"),
+                    "mrr": result.get("mrr"),
+                    "empty_accuracy": result.get("empty_accuracy"),
+                    "k": result.get("k"),
+                    "n_queries": result.get("n_queries"),
+                },
+            )
+            return result
         if method == "admin.extract_now":
             sid = params.get("session_id")
             if not sid and params.get("session_ref"):

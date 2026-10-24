@@ -65,4 +65,16 @@ def calibrate_tau(
         write_config(cfg, root)
         result["written"] = True
         result["config_root"] = str(root)
+    if root is not None:
+        from thememory.eval.scores import append_score
+
+        append_score(
+            root,
+            {
+                "suite": "calibrate",
+                "best_tau": result["best_tau"],
+                "best_score": result["best_score"],
+                "written": result["written"],
+            },
+        )
     return result
