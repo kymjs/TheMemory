@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from thememory.config import load, write_default
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.paths import ensure_layout
 from thememory.storage.db import Database
 from thememory.storage.repos.memory import MemoryRepo

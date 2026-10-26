@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from thememory.config import load, write_default
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.installer.capabilities import HOST_CAPABILITIES
 from thememory.paths import ensure_layout
 from thememory.storage.db import Database

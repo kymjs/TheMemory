@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "description": "Chinese extraction quality fixtures (spec §20.3). Fake-LLM friendly.",
+  "cases": [
+    {
+      "id": "tianjin_plan",
+      "turns": [
+        {"id": "u1", "role": "user", "content": "下周三我要去天津5天", "local_date": "2026-10-22"},
+        {"id": "a1", "role": "assistant", "content": "已记下你的天津行程。"}
+      ],
+      "expect": {
+        "must_types": ["plan"],
+        "must_not_origin": [],
+        "quote_in_user": true,
+        "valid_from": "2026-10-28",
+        "valid_to": "2026-11-01"
+      }
+    },
+    {
+      "id": "assistant_infer_not_user_stated",
+      "turns": [
+        {"id": "u1", "role": "user", "content": "随便聊聊", "local_date": "2026-10-22"},
+        {"id": "a1", "role": "assistant", "content": "你可能喜欢 Rust"}
+      ],
+      "expect": {
+        "forbid_user_stated_from_assistant": true
+      }
+    },
+    {
+      "id": "temp_skip",
+      "turns": [
+        {"id": "u1", "role": "user", "content": "好的", "local_date": "2026-10-22"}
+      ],
+      "expect": {
+        "skip_extract": true
+      }
+    }
+  ]
+}

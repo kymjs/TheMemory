@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from thememory.config import load, write_default
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.storage.db import Database
 
 

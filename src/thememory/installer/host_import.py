@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.storage.db import Database
 from thememory.config import load
 

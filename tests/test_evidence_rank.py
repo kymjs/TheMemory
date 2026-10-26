@@ -9,7 +9,7 @@ import pytest
 from thememory.config import load, write_default
 from thememory.core.extraction import apply_ops, evidence_span
 from thememory.core.retrieval import recency_factor
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.paths import ensure_layout
 from thememory.storage.db import Database
 

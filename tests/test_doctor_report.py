@@ -8,7 +8,7 @@ import pytest
 
 from thememory.config import load, write_default
 from thememory.config.loader import explain_config
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.paths import config_path, ensure_layout
 from thememory.storage.db import Database
 from thememory.storage.repos.memory import MemoryRepo

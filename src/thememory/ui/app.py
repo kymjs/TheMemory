@@ -81,11 +81,30 @@ def _public_config(cfg: dict[str, Any]) -> dict[str, Any]:
         "extraction": {
             "trigger_turns": int(cfg.get("extraction", {}).get("trigger_turns") or 80),
             "trigger_idle_hours": float(cfg.get("extraction", {}).get("trigger_idle_hours") or 3),
+            "window_tokens": int(cfg.get("extraction", {}).get("window_tokens") or 6000),
         },
         "embedding": {
             "model": cfg.get("embedding", {}).get("model") or "",
-            "resident": str(cfg.get("embedding", {}).get("resident") or "true"),
+            "resident": str(cfg.get("embedding", {}).get("resident") or "auto"),
             "query_instruction": cfg.get("embedding", {}).get("query_instruction") or "",
+            "resident_min_total_gb": float(cfg.get("embedding", {}).get("resident_min_total_gb") or 4),
+        },
+        "privacy": {
+            "redact_secrets": bool(cfg.get("privacy", {}).get("redact_secrets", True)),
+            "screen_enabled": bool(cfg.get("privacy", {}).get("screen_enabled", True)),
+            "crosscheck_enabled": bool(cfg.get("privacy", {}).get("crosscheck_enabled", True)),
+        },
+        "isolation": {
+            "profile": str(cfg.get("isolation", {}).get("profile") or "shared"),
+            "procedural": str(cfg.get("isolation", {}).get("procedural") or "shared"),
+        },
+        "backup": {
+            "interval_hours": int(cfg.get("backup", {}).get("interval_hours") or 24),
+            "keep": int(cfg.get("backup", {}).get("keep") or 7),
+        },
+        "disclosures": {
+            "extraction": "提取会把对话发往所配置的 LLM 服务。",
+            "sync": "记忆仅保存在本机，不跨设备、不做云同步；定期备份也只在本机。",
         },
     }
 
@@ -121,6 +140,30 @@ def _apply_updates(cfg: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
         set_path(cfg, "embedding.resident", resident)
     if "query_instruction" in embedding:
         set_path(cfg, "embedding.query_instruction", str(embedding.get("query_instruction") or ""))
+    if "resident_min_total_gb" in embedding:
+        set_path(cfg, "embedding.resident_min_total_gb", float(embedding["resident_min_total_gb"]))
+
+    if "window_tokens" in extraction:
+        set_path(cfg, "extraction.window_tokens", int(extraction["window_tokens"]))
+
+    privacy = body.get("privacy") or {}
+    for key in ("redact_secrets", "screen_enabled", "crosscheck_enabled"):
+        if key in privacy:
+            set_path(cfg, f"privacy.{key}", bool(privacy[key]))
+
+    isolation = body.get("isolation") or {}
+    for key in ("profile", "procedural"):
+        if key in isolation:
+            mode = str(isolation[key])
+            if mode not in {"shared", "isolated"}:
+                raise ConfigError(f"isolation.{key} must be shared|isolated")
+            set_path(cfg, f"isolation.{key}", mode)
+
+    backup = body.get("backup") or {}
+    if "interval_hours" in backup:
+        set_path(cfg, "backup.interval_hours", int(backup["interval_hours"]))
+    if "keep" in backup:
+        set_path(cfg, "backup.keep", int(backup["keep"]))
 
     validate(cfg)
     return cfg

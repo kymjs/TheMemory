@@ -11,21 +11,16 @@ import threading
 from pathlib import Path
 from typing import Any, Callable
 
-from thememory import PROTOCOL_VERSION, __version__
-from thememory.core.service import MemoryService
-from thememory.daemon.ipc.protocol import (
-    decode_line,
-    encode_msg,
-    err_result,
-    hello_handshake,
-    ok_result,
-)
+from thememory.daemon.handlers import dispatch as dispatch_method
+from thememory.daemon.ipc.protocol import decode_line, encode_msg, err_result, ok_result
 from thememory.daemon.scheduler import DaemonScheduler
 from thememory.paths import endpoint_path, lock_path, pid_path, run_dir, sock_path
+from thememory.runtime.service import MemoryService
 
 logger = logging.getLogger(__name__)
 
 Handler = Callable[[dict[str, Any]], dict[str, Any]]
+_DEFAULT_MAX_REQUEST = 8_388_608
 
 
 class DaemonServer:
@@ -134,12 +129,26 @@ class DaemonServer:
                 continue
             threading.Thread(target=self._handle_conn, args=(conn,), daemon=True).start()
 
+    def _max_request_bytes(self) -> int:
+        try:
+            return int(self.service.cfg.get("daemon", {}).get("max_request_bytes") or _DEFAULT_MAX_REQUEST)
+        except (TypeError, ValueError):
+            return _DEFAULT_MAX_REQUEST
+
     def _handle_conn(self, conn: socket.socket) -> None:
         try:
             f = conn.makefile("rwb")
             while not self._stop.is_set():
                 line = f.readline()
                 if not line:
+                    break
+                if len(line) > self._max_request_bytes():
+                    f.write(
+                        encode_msg(
+                            err_result(None, 1003, "payload_too_large", {"limit": self._max_request_bytes()})
+                        )
+                    )
+                    f.flush()
                     break
                 try:
                     msg = decode_line(line)
@@ -178,135 +187,14 @@ class DaemonServer:
                 pass
 
     def dispatch(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
-        svc = self.service
-        if method == "hello":
-            return hello_handshake(
-                params,
-                server_version=__version__,
-                server_protocol=PROTOCOL_VERSION,
-                state=self._state,
-            )
-        if method == "tool.remember":
-            return svc.remember(params)
-        if method == "tool.search":
-            return svc.search(params)
-        if method == "tool.context":
-            return svc.context(params)
-        if method == "tool.forget":
-            return svc.forget(params)
-        if method == "tool.correct":
-            return svc.correct(params)
-        if method == "capture.turn":
-            return svc.capture_turn(params)
-        if method == "capture.event":
-            return svc.capture_event(params)
-        if method == "inject.session_start":
-            return svc.inject_session_start(params)
-        if method == "inject.per_turn":
-            return svc.inject_per_turn(params)
-        if method == "inject.after_compact":
-            return svc.inject_after_compact(params)
-        if method == "admin.status":
-            return {
-                "version": __version__,
-                "state": self._state,
-                "embedder": svc.embedder.available(),
-                "llm": svc.llm.available(),
-            }
-        if method == "admin.doctor":
-            return svc.doctor()
-        if method == "admin.probe":
-            return svc.run_capability_probe()
-        if method == "admin.benchmark":
-            from thememory.installer.benchmark import run_benchmark
-
-            return run_benchmark(self.root, write=bool(params.get("write", True)))
-        if method == "admin.import_host":
-            from pathlib import Path
-
-            from thememory.installer.host_import import import_host_memories
-
-            pr = params.get("project_root")
-            return import_host_memories(
-                host=str(params.get("host") or "claude-code"),
-                project_root=Path(pr) if pr else None,
-                root=self.root,
-                dry_run=bool(params.get("dry_run")),
-                service=svc,
-            )
-        if method == "admin.eval_retrieval":
-            from pathlib import Path
-
-            from thememory.eval.runner import run_retrieval_eval
-
-            fix = params.get("fixture")
-            # Eval uses an isolated temp root to avoid polluting live DB
-            import tempfile
-
-            tmp = Path(tempfile.mkdtemp(prefix="thememory-eval-"))
-            result = run_retrieval_eval(
-                fixture=Path(fix) if fix else None,
-                root=tmp,
-                k=int(params.get("k") or 3),
-            )
-            from thememory.eval.scores import append_score
-
-            append_score(
-                self.root,
-                {
-                    "suite": "retrieval",
-                    "fixture": result.get("fixture"),
-                    "recall_at_k": result.get("recall_at_k"),
-                    "mrr": result.get("mrr"),
-                    "empty_accuracy": result.get("empty_accuracy"),
-                    "k": result.get("k"),
-                    "n_queries": result.get("n_queries"),
-                },
-            )
-            return result
-        if method == "admin.extract_now":
-            sid = params.get("session_id")
-            if not sid and params.get("session_ref"):
-                sess = svc.ensure_session(params)
-                sid = sess["id"]
-            if not sid:
-                raise ValueError("session_id required")
-            return svc.run_extract(str(sid))
-        if method == "admin.shutdown":
-            if params.get("drain"):
-                try:
-                    svc.process_jobs(limit=20)
-                except Exception:  # noqa: BLE001
-                    logger.exception("drain jobs before shutdown")
-            return {"ok": True, "drain": bool(params.get("drain"))}
-        if method == "admin.reload":
-            from thememory.config import load
-
-            svc.reload_config(load(self.root))
-            return {"ok": True}
-        if method == "admin.backup":
-            return svc.run_db_backup()
-        if method == "admin.pause":
-            until = params.get("until") or "forever"
-            return svc.set_pause(until=str(until))
-        if method == "admin.resume":
-            return svc.set_pause(until=None)
-        if method == "admin.purge":
-            return svc.purge(params)
-        if method == "admin.memory_list":
-            return svc.list_memory(params)
-        if method == "admin.memory_show":
-            return svc.show_memory(params)
-        if method == "admin.memory_log":
-            return svc.memory_log(params)
-        if method == "admin.turns_search":
-            return svc.search_turns(params)
-        if method == "admin.maintenance":
-            return {
-                "maintenance": svc.run_maintenance(),
-                "evict": svc.maybe_evict_turns(),
-            }
-        raise KeyError(method)
+        return dispatch_method(
+            method,
+            params,
+            service=self.service,
+            state=self._state,
+            root=self.root,
+            on_shutdown=lambda: self._stop.set(),
+        )
 
 
 def os_getpid() -> int:

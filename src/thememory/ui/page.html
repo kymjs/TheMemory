@@ -154,6 +154,12 @@
     </section>
 
     <section>
+      <h2>说明</h2>
+      <p class="sub" id="disclosure_extraction"></p>
+      <p class="sub" id="disclosure_sync"></p>
+    </section>
+
+    <section>
       <h2>提取触发</h2>
       <div class="grid">
         <label>轮次阈值 trigger_turns
@@ -161,6 +167,9 @@
         </label>
         <label>空闲小时 trigger_idle_hours
           <input id="trigger_idle_hours" type="number" min="0" step="0.5" />
+        </label>
+        <label>窗口 token window_tokens
+          <input id="window_tokens" type="number" min="500" />
         </label>
       </div>
     </section>
@@ -178,8 +187,44 @@
             <option value="false">false</option>
           </select>
         </label>
+        <label>总内存下限 GB（auto）
+          <input id="resident_min_total_gb" type="number" min="0" step="0.5" />
+        </label>
         <label class="full">查询指令前缀 query_instruction
           <input id="query_instruction" />
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <h2>隐私与隔离</h2>
+      <div class="grid">
+        <label>脱敏 redact_secrets
+          <select id="redact_secrets"><option value="true">true</option><option value="false">false</option></select>
+        </label>
+        <label>写入筛查 screen_enabled
+          <select id="screen_enabled"><option value="true">true</option><option value="false">false</option></select>
+        </label>
+        <label>remember 核对 crosscheck_enabled
+          <select id="crosscheck_enabled"><option value="true">true</option><option value="false">false</option></select>
+        </label>
+        <label>画像隔离 isolation.profile
+          <select id="iso_profile"><option value="shared">shared</option><option value="isolated">isolated</option></select>
+        </label>
+        <label>程序性隔离 isolation.procedural
+          <select id="iso_procedural"><option value="shared">shared</option><option value="isolated">isolated</option></select>
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <h2>本机备份</h2>
+      <div class="grid">
+        <label>周期小时 interval_hours
+          <input id="backup_interval" type="number" min="1" />
+        </label>
+        <label>保留份数 keep
+          <input id="backup_keep" type="number" min="1" />
         </label>
       </div>
     </section>
@@ -250,9 +295,20 @@
         : "当前未在配置文件中保存 api_key。";
       $("trigger_turns").value = data.extraction.trigger_turns;
       $("trigger_idle_hours").value = data.extraction.trigger_idle_hours;
+      $("window_tokens").value = data.extraction.window_tokens || 6000;
       $("embedding_model").value = data.embedding.model || "";
       $("resident").value = String(data.embedding.resident);
+      $("resident_min_total_gb").value = data.embedding.resident_min_total_gb || 4;
       $("query_instruction").value = data.embedding.query_instruction || "";
+      $("redact_secrets").value = String(!!data.privacy.redact_secrets);
+      $("screen_enabled").value = String(!!data.privacy.screen_enabled);
+      $("crosscheck_enabled").value = String(!!data.privacy.crosscheck_enabled);
+      $("iso_profile").value = data.isolation.profile || "shared";
+      $("iso_procedural").value = data.isolation.procedural || "shared";
+      $("backup_interval").value = data.backup.interval_hours || 24;
+      $("backup_keep").value = data.backup.keep || 7;
+      $("disclosure_extraction").textContent = (data.disclosures && data.disclosures.extraction) || "";
+      $("disclosure_sync").textContent = (data.disclosures && data.disclosures.sync) || "";
       const matched = findProviderByUrl(data.llm.base_url || "");
       suppressProviderSync = true;
       $("provider").value = matched ? matched.id : "custom";
@@ -368,10 +424,25 @@
           extraction: {
             trigger_turns: Number($("trigger_turns").value),
             trigger_idle_hours: Number($("trigger_idle_hours").value),
+            window_tokens: Number($("window_tokens").value),
           },
           embedding: {
             resident: $("resident").value,
             query_instruction: $("query_instruction").value,
+            resident_min_total_gb: Number($("resident_min_total_gb").value),
+          },
+          privacy: {
+            redact_secrets: $("redact_secrets").value === "true",
+            screen_enabled: $("screen_enabled").value === "true",
+            crosscheck_enabled: $("crosscheck_enabled").value === "true",
+          },
+          isolation: {
+            profile: $("iso_profile").value,
+            procedural: $("iso_procedural").value,
+          },
+          backup: {
+            interval_hours: Number($("backup_interval").value),
+            keep: Number($("backup_keep").value),
           },
         };
         const res = await fetch("/api/config", {

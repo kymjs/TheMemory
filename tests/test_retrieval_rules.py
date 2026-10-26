@@ -13,7 +13,7 @@ from thememory.core.retrieval import (
     scope_visible,
     tombstone_similar,
 )
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.paths import ensure_layout
 from thememory.storage.db import Database
 from thememory.storage.repos.memory import pack_vector

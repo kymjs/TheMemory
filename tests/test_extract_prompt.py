@@ -10,7 +10,7 @@ import pytest
 from thememory.config import load, write_default
 from thememory.core.extraction import SYSTEM_PROMPT
 from thememory.core.host_status import inspect_hosts
-from thememory.core.service import MemoryService, parse_backoff_seconds
+from thememory.runtime.service import MemoryService, parse_backoff_seconds
 from thememory.paths import ensure_layout
 from thememory.storage.db import Database
 from thememory.storage.repos.memory import MemoryRepo

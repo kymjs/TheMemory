@@ -18,14 +18,15 @@ def main(argv: list[str] | None = None) -> int:
 
     p_setup = sub.add_parser(
         "setup",
-        help="initialize data dir, model, optional hosts",
+        help="initialize data dir, model, optional hosts (interactive wizard by default)",
         description=(
-            "Non-interactive setup. Autostart, benchmark, LLM probe, and host "
-            "install run only when the matching flag is passed, so scripts never "
-            "block on a question."
+            "Interactive setup wizard (spec §16.2). Pass --yes / flags for "
+            "non-interactive scripts. Download size note: embedding model ~95MB "
+            "vendored; onnxruntime + deps may bring total install to 200–300MB."
         ),
     )
     p_setup.add_argument("--dev", action="store_true")
+    p_setup.add_argument("--yes", action="store_true", help="non-interactive; skip prompts")
     p_setup.add_argument(
         "--repair",
         action="store_true",
@@ -364,13 +365,38 @@ def _print(data: dict[str, Any]) -> int:
     return 0 if data.get("status", "ok") != "failed" else 1
 
 
+def _ask(prompt: str, *, default: str = "") -> str:
+    suffix = f" [{default}]" if default else ""
+    try:
+        raw = input(f"{prompt}{suffix}: ").strip()
+    except EOFError:
+        return default
+    return raw or default
+
+
+def _ask_yes(prompt: str, *, default: bool = False) -> bool:
+    hint = "Y/n" if default else "y/N"
+    ans = _ask(f"{prompt} ({hint})", default="y" if default else "n").lower()
+    if ans in {"y", "yes", "是"}:
+        return True
+    if ans in {"n", "no", "否"}:
+        return False
+    return default
+
+
 def cmd_setup(args: argparse.Namespace) -> int:
-    from thememory.config import load, write_default
+    from thememory.config import load, set_path, write_config, write_default
     from thememory.installer.hook_template import install_hook_script
     from thememory.installer.model import ensure_model
     from thememory.paths import ensure_layout, home_dir
 
     root = home_dir()
+    interactive = sys.stdin.isatty() and not args.yes and not args.dev
+    print(
+        "TheMemory setup：嵌入模型约 95MB（仓库内置，无需联网下载）；"
+        "连同 onnxruntime 等依赖，总安装体积可能约 200–300MB。"
+    )
+    print("提取对话会发往你配置的 LLM 服务；记忆仅本机、不跨设备云同步。")
     ensure_layout(root)
     write_default(root)
     install_hook_script(root)
@@ -382,12 +408,17 @@ def cmd_setup(args: argparse.Namespace) -> int:
 
         print(json.dumps(repair_install(root), ensure_ascii=False, indent=2))
         return 0
-    if args.autostart:
+
+    do_autostart = args.autostart
+    if interactive and not args.autostart:
+        do_autostart = _ask_yes("是否注册开机自启？（不静默注册）", default=False)
+    if do_autostart:
         from thememory.installer.autostart import install_autostart
 
         print(install_autostart(root))
+
     if not args.skip_model:
-        print("Installing embedding model (may download ~90MB)...")
+        print("Installing embedding model from vendor/models (offline copy)...")
         from thememory.outbound.embed_onnx import optimize_onnx
 
         model_dir = ensure_model(root)
@@ -395,23 +426,50 @@ def cmd_setup(args: argparse.Namespace) -> int:
     from thememory.installer.bytecode import compile_installed_package
 
     print(json.dumps(compile_installed_package(), ensure_ascii=False))
+
     cfg = load(root)
+    if interactive:
+        print("配置提取 LLM（可留空跳过；跳过后采集照常、提取暂停，doctor 会提示）。")
+        base = _ask("llm.extraction.base_url", default=str(cfg["llm"]["extraction"].get("base_url") or ""))
+        model = _ask("llm.extraction.model", default=str(cfg["llm"]["extraction"].get("model") or ""))
+        if base:
+            set_path(cfg, "llm.extraction.base_url", base.rstrip("/"))
+        if model:
+            set_path(cfg, "llm.extraction.model", model)
+        key_env = _ask(
+            "api_key_env（环境变量名）",
+            default=str(cfg["llm"]["extraction"].get("api_key_env") or "THEMEMORY_LLM_API_KEY"),
+        )
+        if key_env:
+            set_path(cfg, "llm.extraction.api_key_env", key_env)
+        write_config(cfg, root)
+
     print(f"data dir: {root}")
-    print(f"llm configured: {bool(cfg['llm']['extraction'].get('base_url') and cfg['llm']['extraction'].get('model'))}")
-    # start daemon
+    print(
+        f"llm configured: {bool(cfg['llm']['extraction'].get('base_url') and cfg['llm']['extraction'].get('model'))}"
+    )
     cmd_daemon(argparse.Namespace(action="start", home=None))
-    if args.benchmark:
+
+    do_bench = args.benchmark or (interactive and _ask_yes("运行本机性能基准测试？", default=True))
+    if do_bench:
         from thememory.installer.benchmark import run_benchmark
 
         print("Running local benchmark...")
         print(json.dumps(run_benchmark(root, write=True), ensure_ascii=False, indent=2))
-    if args.probe:
+
+    do_probe = args.probe or (
+        interactive
+        and bool(cfg["llm"]["extraction"].get("base_url"))
+        and _ask_yes("运行 LLM 能力探测？", default=True)
+    )
+    if do_probe:
         try:
             print("Running LLM capability probe...")
             print(json.dumps(rpc("admin.probe", {}), ensure_ascii=False, indent=2))
         except Exception as exc:  # noqa: BLE001
             print(f"probe skipped: {exc}")
-    if args.import_claude:
+
+    if args.import_claude or (interactive and _ask_yes("导入 Claude Code 已有记忆为 candidate？", default=False)):
         from thememory.installer.host_import import import_host_memories
 
         print("Importing Claude Code memory files as candidates...")
@@ -422,7 +480,11 @@ def cmd_setup(args: argparse.Namespace) -> int:
                 indent=2,
             )
         )
-    if args.install_hosts:
+
+    do_hosts = args.install_hosts
+    if interactive and not args.install_hosts:
+        do_hosts = _ask_yes("检测并接入已安装宿主（Claude Code / DSH / Hermes / Cursor）？", default=True)
+    if do_hosts:
         from thememory.installer import host_claude_code, host_cursor, host_dsh, host_hermes
 
         print("Installing Claude Code hooks + MCP...")
@@ -434,7 +496,16 @@ def cmd_setup(args: argparse.Namespace) -> int:
         print(host_hermes.install())
         print("Installing Cursor MCP + hooks...")
         print(host_cursor.install())
-    print("setup done. Configure LLM via: thememory config set llm.extraction.base_url ...")
+
+    try:
+        from thememory.eval.fts_compare import write_schema_note
+
+        note = write_schema_note(root)
+        print(f"FTS scheme note: {note}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"fts compare skipped: {exc}")
+
+    print("setup done. doctor / ui / config set 可继续调整。")
     return 0
 
 

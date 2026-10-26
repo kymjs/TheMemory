@@ -1,3 +1,3 @@
-from thememory.core.service import MemoryService
+"""Domain layer: pure rules and helpers. Must not import storage/outbound/daemon."""
 
-__all__ = ["MemoryService"]
+__all__: list[str] = []

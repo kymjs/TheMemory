@@ -31,14 +31,16 @@ def spawn_daemon(*, home: Path | None = None, env: dict[str, str] | None = None)
     if sys.platform == "win32":
         # CREATE_NO_WINDOW suppresses the console for python.exe children;
         # DETACHED_PROCESS alone still often flashes conhost briefly.
+        # getattr keeps unit tests on POSIX able to monkeypatch platform=win32.
         create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-        kwargs["creationflags"] = (
-            subprocess.CREATE_NEW_PROCESS_GROUP | create_no_window  # type: ignore[attr-defined]
-        )
-        si = subprocess.STARTUPINFO()
-        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        si.wShowWindow = subprocess.SW_HIDE
-        kwargs["startupinfo"] = si
+        create_new_group = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+        kwargs["creationflags"] = create_new_group | create_no_window
+        startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
+        if startupinfo_cls is not None:
+            si = startupinfo_cls()
+            si.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 1)
+            si.wShowWindow = getattr(subprocess, "SW_HIDE", 0)
+            kwargs["startupinfo"] = si
     else:
         kwargs["start_new_session"] = True
 

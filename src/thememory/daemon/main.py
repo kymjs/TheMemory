@@ -11,7 +11,7 @@ from pathlib import Path
 
 from thememory.config import load, write_default
 from thememory.core.redaction import redact_secrets
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.daemon.server import DaemonServer
 from thememory.installer.model import ensure_model
 from thememory.paths import ensure_layout, home_dir, logs_dir

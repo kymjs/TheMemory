@@ -51,23 +51,35 @@ DEFAULTS: dict[str, Any] = {
     },
     "embedding": {
         "model": "bge-small-zh-v1.5",
-        "resident": "true",
+        "resident": "auto",
         "resident_high_multiple": 4,
         "resident_high_min_gb": 2,
         "resident_low_multiple": 2,
+        "resident_min_total_gb": 4.0,
         "idle_unload_minutes": 10,
         "query_instruction": "为这个句子生成表示以用于检索相关文章：",
+        "footprint_gb": 0.5,
     },
     "retrieval": {
         "search_limit": 8,
         "inject_max_items": 3,
         "inject_max_chars": 400,
         "inject_min_interval_turns": 2,
+        # Cosine thresholds keep §15.2 defaults. BM25 τ calibrated to FTS5 unicode61
+        # + bigram fts_text scale (sqlite bm25 magnitudes are ~1e-5..1e-2 on small corpora);
+        # keyword/alias hits still bypass τ (spec §9.1).
         "tau_search_cosine": 0.50,
         "tau_inject_cosine": 0.60,
-        "tau_search_bm25": 2.0,
-        "tau_inject_bm25": 3.0,
+        "tau_search_bm25": 0.0,
+        "tau_inject_bm25": 0.0,
         "rrf_k": 60,
+        "half_life_days": {
+            "profile_fact": 365,
+            "preference": 180,
+            "pattern": 90,
+            "note": 60,
+            "procedural": 365,
+        },
     },
     "snapshot": {
         "budget_profile": 1500,
@@ -187,15 +199,25 @@ candidate_ttl_days = 60
 
 [embedding]
 model = "bge-small-zh-v1.5"
-resident = "true"
+resident = "auto"
+resident_high_multiple = 4
+resident_high_min_gb = 2
+resident_low_multiple = 2
+resident_min_total_gb = 4.0
+idle_unload_minutes = 10
+footprint_gb = 0.5
 query_instruction = "为这个句子生成表示以用于检索相关文章："
 
 [retrieval]
 search_limit = 8
 inject_max_items = 3
 inject_max_chars = 400
+inject_min_interval_turns = 2
 tau_search_cosine = 0.50
 tau_inject_cosine = 0.60
+# Calibrated for FTS5 unicode61 + Chinese bigram fts_text (M4); keyword/alias still bypass
+tau_search_bm25 = 0.0
+tau_inject_bm25 = 0.0
 rrf_k = 60
 
 [snapshot]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
 import threading
 from collections.abc import Callable, Iterator
@@ -31,11 +32,34 @@ def _connect(path: Path, *, incremental_vacuum: bool = False) -> sqlite3.Connect
     return conn
 
 
+def _connect_readonly(path: Path) -> sqlite3.Connection:
+    """Independent read-only connection (spec §3.3). Falls back to RW if file missing."""
+    if not path.exists():
+        return _connect(path)
+    uri = f"file:{path}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, check_same_thread=False, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
+
 def _read_sql(name: str) -> str:
     return (_MIGRATIONS / name).read_text(encoding="utf-8")
 
 
-def migrate_memory(conn: sqlite3.Connection) -> None:
+def _backup_before_migrate(path: Path, version: int) -> Path | None:
+    """Copy memory.db.pre-v{N}.bak before schema bumps (spec §4)."""
+    if not path.exists() or path.stat().st_size == 0:
+        return None
+    dest = path.with_name(f"{path.name}.pre-v{version}.bak")
+    try:
+        shutil.copy2(path, dest)
+    except OSError:
+        return None
+    return dest
+
+
+def migrate_memory(conn: sqlite3.Connection, path: Path | None = None) -> None:
     row = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"
     ).fetchone()
@@ -48,6 +72,8 @@ def migrate_memory(conn: sqlite3.Connection) -> None:
         return
     ver = conn.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()["v"] or 0
     if ver < 2:
+        if path is not None:
+            _backup_before_migrate(path, 2)
         # Idempotent column adds for DBs created at v1
         cols = {
             r[1]
@@ -91,15 +117,23 @@ class Database:
     def __init__(self, root: Path | None = None) -> None:
         ensure_layout(root)
         self.root = root
-        self.memory = _connect(memory_db_path(root))
-        self.turns = _connect(turns_db_path(root), incremental_vacuum=True)
+        mem_path = memory_db_path(root)
+        turns_path = turns_db_path(root)
+        self.memory = _connect(mem_path)
+        self.turns = _connect(turns_path, incremental_vacuum=True)
         self._write_lock = threading.Lock()
-        migrate_memory(self.memory)
+        migrate_memory(self.memory, mem_path)
         migrate_turns(self.turns)
+        # Separate read-only handles so readers never share the write connection (spec §3.3).
+        self._memory_ro = _connect_readonly(mem_path)
+        self._turns_ro = _connect_readonly(turns_path)
 
     def close(self) -> None:
-        self.memory.close()
-        self.turns.close()
+        for conn in (self._memory_ro, self._turns_ro, self.memory, self.turns):
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     @contextmanager
     def write(self, which: str = "memory") -> Iterator[sqlite3.Connection]:
@@ -114,10 +148,10 @@ class Database:
                 raise
 
     def read_memory(self) -> sqlite3.Connection:
-        return self.memory
+        return self._memory_ro
 
     def read_turns(self) -> sqlite3.Connection:
-        return self.turns
+        return self._turns_ro
 
     def run_write(self, which: str, fn: Callable[[sqlite3.Connection], T]) -> T:
         with self.write(which) as conn:

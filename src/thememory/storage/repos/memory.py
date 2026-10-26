@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import struct
 from typing import Any
 
+from thememory.core.vectors import pack_vector, unpack_vector
 from thememory.util import content_hash, json_list, new_id, parse_json_list, prepare_fts_text, utc_now
 
 
@@ -773,12 +773,20 @@ class MemoryRepo:
         return [dict(r) for r in rows]
 
     def recent_harm(self, limit: int = 5) -> list[dict[str, Any]]:
+        """Harm after injection in the same session (spec §18.3), plus HARM op rows."""
         rows = self.conn.execute(
             """
-            SELECT ts, item_id, op, actor, reason
-            FROM changes
-            WHERE op IN ('CORRECT', 'FORGET', 'RETRACT', 'HARM')
-            ORDER BY id DESC
+            SELECT c.ts, c.item_id, c.op, c.actor, c.reason, l.session_id, l.injected_at
+            FROM changes c
+            LEFT JOIN injection_ledger l
+              ON l.item_id = c.item_id
+             AND l.injected_at <= c.ts
+            WHERE c.op IN ('CORRECT', 'FORGET', 'RETRACT', 'HARM')
+              AND (
+                c.op = 'HARM'
+                OR l.item_id IS NOT NULL
+              )
+            ORDER BY c.id DESC
             LIMIT ?
             """,
             (limit,),
@@ -788,16 +796,15 @@ class MemoryRepo:
     def count_harm_signals(self) -> int:
         row = self.conn.execute(
             """
-            SELECT COUNT(*) AS c FROM changes
-            WHERE op IN ('CORRECT','FORGET','RETRACT','HARM')
+            SELECT COUNT(*) AS c FROM (
+              SELECT c.id
+              FROM changes c
+              LEFT JOIN injection_ledger l
+                ON l.item_id = c.item_id
+               AND l.injected_at <= c.ts
+              WHERE c.op IN ('CORRECT','FORGET','RETRACT','HARM')
+                AND (c.op = 'HARM' OR l.item_id IS NOT NULL)
+            )
             """
         ).fetchone()
         return int(row["c"])
-
-
-def pack_vector(vec: list[float]) -> bytes:
-    return struct.pack(f"<{len(vec)}f", *vec)
-
-
-def unpack_vector(blob: bytes, dim: int) -> list[float]:
-    return list(struct.unpack(f"<{dim}f", blob))

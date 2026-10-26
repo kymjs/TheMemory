@@ -9,7 +9,7 @@ import pytest
 from thememory.client.fts_fallback import fallback_block, search_memory_fts
 from thememory.config import load, write_default
 from thememory.core.residency import decide_residency
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.installer.hook_template import HOOK_SOURCE
 from thememory.paths import ensure_layout, memory_db_path
 from thememory.storage.db import Database

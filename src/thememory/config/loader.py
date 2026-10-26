@@ -90,20 +90,44 @@ def _validate_section(path: str, value: dict[str, Any], template: dict[str, Any]
             for hk, hv in child.items():
                 if hk not in host_keys:
                     raise ConfigError(f"unknown config key: hosts.{key}.{hk}")
+                if not isinstance(hv, bool):
+                    raise ConfigError(f"hosts.{key}.{hk} must be a boolean")
             continue
         if key not in template:
             if path == "llm" and key in {"extraction", "consolidation", "budget"}:
-                if isinstance(child, dict):
-                    _validate_section(f"{path}.{key}", child, template.get(key, {}))
+                if not isinstance(child, dict):
+                    raise ConfigError(f"{path}.{key} must be a table")
+                base = (
+                    DEFAULTS["llm"]["extraction"]
+                    if key == "consolidation"
+                    else template.get(key, DEFAULTS["llm"].get(key, {}))
+                )
+                _validate_section(f"{path}.{key}", child, base if isinstance(base, dict) else {})
                 continue
             raise ConfigError(f"unknown config key: {path}.{key}")
         expected = template[key]
-        if isinstance(expected, dict) and isinstance(child, dict):
+        if isinstance(expected, dict):
+            if not isinstance(child, dict):
+                raise ConfigError(f"{path}.{key} must be a table")
             if path == "llm" and key == "consolidation":
                 # partial overlay allowed; keys must match extraction schema
                 _validate_section(f"{path}.{key}", child, DEFAULTS["llm"]["extraction"])
                 continue
             _validate_section(f"{path}.{key}", child, expected)
+            continue
+        if isinstance(expected, bool) and not isinstance(child, bool):
+            raise ConfigError(f"{path}.{key} must be a boolean")
+        elif isinstance(expected, int) and not isinstance(expected, bool):
+            # TOML/JSON often coerce whole numbers; also accept float for hour-like fields.
+            if isinstance(child, bool) or not isinstance(child, (int, float)):
+                raise ConfigError(f"{path}.{key} must be a number")
+        elif isinstance(expected, float):
+            if isinstance(child, bool) or not isinstance(child, (int, float)):
+                raise ConfigError(f"{path}.{key} must be a number")
+        elif isinstance(expected, str) and not isinstance(child, str):
+            raise ConfigError(f"{path}.{key} must be a string")
+        elif isinstance(expected, list) and not isinstance(child, list):
+            raise ConfigError(f"{path}.{key} must be an array")
 
 
 def _stamp_sources(node: dict[str, Any], prefix: str, sources: dict[str, str], label: str) -> None:
@@ -265,5 +289,11 @@ def _toml_value(value: Any) -> str:
 def write_config(cfg: dict[str, Any], root: Path | None = None) -> Path:
     validate(cfg)
     path = config_path(root)
-    path.write_text(_to_toml(cfg), encoding="utf-8")
+    from thememory.config.toml_edit import write_preserving
+
+    write_preserving(path, cfg, fallback_dump=_to_toml)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
     return path

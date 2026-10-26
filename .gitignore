@@ -49,8 +49,12 @@ Thumbs.db
 *.db-wal
 *.db-shm
 bench/results/
-models/
+# Ignore loose model dirs at repo root only; vendor/models is committed.
+/models/
 *.onnx
+!/vendor/models/
+!/vendor/models/**
+!/vendor/models/**/*.onnx
 
 # Secrets
 .env

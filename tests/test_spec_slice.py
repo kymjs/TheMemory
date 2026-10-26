@@ -15,7 +15,7 @@ from thememory.core.extraction import (
     split_windows,
 )
 from thememory.core.project_key import _normalize_remote, resolve_project_key
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.paths import ensure_layout
 from thememory.storage.db import Database
 from thememory.storage.repos.memory import MemoryRepo

@@ -11,7 +11,7 @@ import pytest
 
 from thememory.cli.main import confirm_once, confirm_twice, delete_data_dir
 from thememory.config import load, write_default
-from thememory.core.service import MemoryService
+from thememory.runtime.service import MemoryService
 from thememory.daemon.main import SecretLogFilter
 from thememory.eval.counterfactual import run_counterfactual, score_cell
 from thememory.installer.autostart import runtime_status

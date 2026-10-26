@@ -12,7 +12,7 @@ from thememory.config import load
 from thememory.paths import config_path
 
 if TYPE_CHECKING:
-    from thememory.core.service import MemoryService
+    from thememory.runtime.service import MemoryService
 
 logger = logging.getLogger(__name__)
 

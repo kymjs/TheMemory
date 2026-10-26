@@ -1,12 +1,12 @@
-"""FTS + vector retrieval with RRF fusion."""
+"""FTS + vector retrieval with RRF fusion (pure; no storage imports)."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
-from thememory.storage.repos.memory import MemoryRepo, unpack_vector
+from thememory.core.vectors import unpack_vector
 
 
 def rrf_fuse(
@@ -45,34 +45,39 @@ def rrf_fuse(
     return out
 
 
-def vector_search(
-    repo: MemoryRepo,
-    query_vec: list[float],
+def vector_search_matrix(
     *,
-    model_id: str,
+    ids: list[str],
+    matrix: np.ndarray,
+    query_vec: list[float],
     tau: float,
     limit: int = 20,
     active_ids: set[str] | None = None,
+    resolve_item: Callable[[str], dict[str, Any] | None],
     statuses: set[str] | None = None,
 ) -> list[tuple[dict[str, Any], float]]:
+    """Cosine/dot search over an in-memory L2-normalized matrix (spec §9.5)."""
+    if matrix.size == 0 or not ids:
+        return []
     q = np.asarray(query_vec, dtype=np.float32)
-    hits: list[tuple[str, float]] = []
-    for item_id, blob, dim in repo.all_embeddings(model_id):
+    if q.ndim != 1 or matrix.shape[1] != q.shape[0]:
+        return []
+    sims = matrix @ q
+    order = np.argsort(-sims)
+    allowed = statuses or {"active"}
+    out: list[tuple[dict[str, Any], float]] = []
+    for idx in order:
+        sim = float(sims[int(idx)])
+        if sim < tau:
+            break
+        item_id = ids[int(idx)]
         if active_ids is not None and item_id not in active_ids:
             continue
-        if dim != len(q):
-            continue
-        v = np.asarray(unpack_vector(blob, dim), dtype=np.float32)
-        sim = float(np.dot(q, v))
-        if sim >= tau:
-            hits.append((item_id, sim))
-    hits.sort(key=lambda x: x[1], reverse=True)
-    out: list[tuple[dict[str, Any], float]] = []
-    for item_id, sim in hits[:limit]:
-        allowed = statuses or {"active"}
-        item = repo.get(item_id)
+        item = resolve_item(item_id)
         if item and item.get("status") in allowed:
             out.append((item, sim))
+            if len(out) >= limit:
+                break
     return out
 
 

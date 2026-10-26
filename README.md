@@ -6,31 +6,41 @@
 
 - Python 3.11–3.13（推荐 3.12）
 - [uv](https://docs.astral.sh/uv/)
-- 可选宿主：Claude Code、DeepSeek Harness（DSH）
+- 可选宿主：Claude Code、DeepSeek Harness（DSH）、Codex、Hermes、Cursor、WorkBuddy、豆包办公
+
+## 体积与隐私说明
+
+- 仓库内置嵌入模型 `vendor/models/bge-small-zh-v1.5/`（约 95MB ONNX）。连同 uv / Python / onnxruntime，总安装体积可能约 **200–300MB**。
+- **提取会把对话发往你配置的 LLM 端点**；记忆只存在本机，**不跨设备、不做云同步**（本机定期备份也仅保护本机数据）。
 
 ## 开发安装
 
 ```bash
 uv sync
-uv run thememory setup --dev --install-hosts
+uv run thememory setup --yes --install-hosts --benchmark
+```
+
+交互式向导（默认，TTY 下）：
+
+```bash
+uv run thememory setup
 ```
 
 `setup` 会：
 
 1. 创建 `~/.thememory/`
-2. 下载/安装 bge-small-zh-v1.5 ONNX 嵌入模型
+2. 从仓库 `vendor/models/` **离线复制** bge-small-zh-v1.5
 3. 拉起 `thememoryd`
-4. （`--install-hosts`）写入 Claude Code hooks + MCP，以及 DSH `cordis.patch.yml`
+4. （可选）写入 Claude Code / DSH / Hermes / Cursor 等宿主配置
 
 配置提取 LLM（推荐可视化）：
 
 ```bash
 uv run thememory ui
 # 浏览器打开 http://127.0.0.1:8765/
-# 可选择 DSH/pi-ai 同款提供方自动填 base_url，并刷新模型列表
 ```
 
-也可继续用 CLI / 手改 `~\.thememory\config.toml`：
+也可继续用 CLI / 手改 `~/.thememory/config.toml`：
 
 ```bash
 uv run thememory config set llm.extraction.base_url https://api.deepseek.com/v1
